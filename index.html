@@ -258,7 +258,14 @@
       <label>顏色</label>
       <div id="color-picker"></div>
     </div>
-    <div class="form-row"><label>造訪日期</label><input type="date" id="f-date"></div>
+    <div class="form-row">
+      <label class="wish-toggle-row">
+        <input type="checkbox" id="f-wishlist" onchange="onWishlistToggle()">
+        <span>這是「想去的地方」（還沒去過）</span>
+      </label>
+      <div class="wish-hint">勾選後地圖上會用黑色標記，並集中顯示在「想去的地方」群組</div>
+    </div>
+    <div class="form-row"><label id="f-date-label">造訪日期</label><input type="date" id="f-date"></div>
     <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
       <select id="f-trip" onchange="onTripSelectChange()"><option value="">未分類</option></select>
     </div>
@@ -266,6 +273,33 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">取消</button>
       <button class="btn-primary" onclick="savePlace()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Route Details Modal (filled in after a route is computed) -->
+<div id="route-details-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>路線資料</h3>
+    <div class="form-row"><label>路線名稱</label><input type="text" id="rd-name" placeholder="例：鎌倉海岸散步"></div>
+    <div class="form-row"><label>分類</label>
+      <select id="rd-cat">
+        <option value="散步">散步</option>
+        <option value="通勤">通勤</option>
+        <option value="觀光">觀光</option>
+        <option value="美食巡禮">美食巡禮</option>
+        <option value="購物">購物</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="form-row"><label>日期</label><input type="date" id="rd-date"></div>
+    <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
+      <select id="rd-trip"><option value="">未分類</option></select>
+    </div>
+    <div class="form-row"><label>筆記</label><textarea id="rd-note" placeholder="記錄這條路線的感受、推薦理由..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeRouteDetailsModal()">取消</button>
+      <button class="btn-primary" onclick="saveRouteDetails()">儲存路線</button>
     </div>
   </div>
 </div>

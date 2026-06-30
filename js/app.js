@@ -25,6 +25,10 @@ const TRANSPORT = {
   walk:  { label: '走路',        color: '#EF9F27', dash: [4, 4] },
   train: { label: '電車',        color: '#D85A30', dash: [12, 3] },
 };
+// Route-specific categories (separate from place tags)
+const ROUTE_CATEGORIES = ['散步', '通勤', '觀光', '美食巡禮', '購物', '其他'];
+// Color used for places marked as "want to go" (not yet visited)
+const WISHLIST_COLOR = '#1a1a1a';
 const TAG_STYLE = {
   '美食': { bg: '#FAEEDA', text: '#633806' },
   '神社': { bg: '#E1F5EE', text: '#085041' },
@@ -86,7 +90,7 @@ const ICON_SVG_PATHS = {
 
 // Resolve a place's effective icon and color (custom overrides, else category default, else fallback)
 function placeIcon(p) { return p.icon || TAG_DEFAULT_ICON[p.tag] || 'pin'; }
-function placeColor(p) { return p.color || TAG_DEFAULT_COLOR[p.tag] || '#566573'; }
+function placeColor(p) { return p.wishlist ? WISHLIST_COLOR : (p.color || TAG_DEFAULT_COLOR[p.tag] || '#566573'); }
 
 // Build a Google Maps marker icon (data-URI SVG): colored teardrop pin with white glyph inside.
 function buildMarkerIcon(iconKey, color, scale) {
@@ -125,6 +129,7 @@ let pendingIcon = 'food', pendingColor = '#E8833A';  // for the icon/color picke
 let topTransport = 'drive';       // for top search bar route mode
 let routeClickTarget = null;      // pending {lat,lng,label} when picking origin/dest from map in route mode
 let routeOriginCoord = null, routeDestCoord = null;  // precise coords when origin/dest picked from map
+let pendingRoute = null;          // computed route awaiting details-form confirmation
 let pendingImport = null;
 let sidebarOpen = true;
 let deleteSelected = new Set();
@@ -592,9 +597,11 @@ window.editSelectedPlace = function() {
   document.getElementById('f-tag').value = p.tag || '美食';
   document.getElementById('f-date').value = p.date || '';
   document.getElementById('f-note').value = p.note || '';
-  // Populate pickers with this place's effective icon/color
-  pendingIcon = placeIcon(p);
-  pendingColor = placeColor(p);
+  document.getElementById('f-wishlist').checked = !!p.wishlist;
+  applyWishlistUI(!!p.wishlist);
+  // Populate pickers with this place's stored icon/color (raw, not the black wishlist override)
+  pendingIcon = p.icon || TAG_DEFAULT_ICON[p.tag] || 'pin';
+  pendingColor = p.color || TAG_DEFAULT_COLOR[p.tag] || '#566573';
   renderIconPicker();
   renderColorPicker();
   refreshTripDropdowns();
@@ -723,11 +730,12 @@ function placeItemHtml(p) {
   const delSel = deleteSelected.has(`place:${p.id}`);
   const color = placeColor(p);
   const iconKey = placeIcon(p);
+  const wishBadge = p.wishlist ? `<span class="wish-badge">想去</span>` : '';
   return `<div class="place-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectPlace('${p.id}')">
     ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
     <div class="place-icon" style="background:${color};"><svg class="icon" style="color:#fff;"><use href="#pin-${iconKey}"/></svg></div>
     <div class="place-info">
-      <div class="place-name">${esc(p.name)}</div>
+      <div class="place-name">${esc(p.name)}${wishBadge}</div>
       <div class="place-meta">${p.date || ''}</div>
       <span class="place-tag" style="background:${color}1f;color:${color};">${p.tag}</span>
     </div>
@@ -738,13 +746,14 @@ function routeItemHtml(r) {
   const t = TRANSPORT[r.transport] || TRANSPORT.drive;
   const sel = selectedRouteId === r.id;
   const delSel = deleteSelected.has(`route:${r.id}`);
+  const catBadge = r.cat ? `<span class="route-cat-badge">${esc(r.cat)}</span>` : '';
   return `<div class="route-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectRoute('${r.id}')">
     ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
     <div class="route-swatch" style="background:${t.color};"></div>
     <div class="route-info">
       <div class="route-name">${esc(r.name)}</div>
-      <div class="route-meta">${(r.points || []).length} 個節點</div>
-      <span class="transport-badge" style="background:${t.color}22;color:${t.color};">${t.label}</span>
+      <div class="route-meta">${r.date || ''}${r.date ? ' · ' : ''}${(r.points || []).length} 個節點</div>
+      <span class="transport-badge" style="background:${t.color}22;color:${t.color};">${t.label}</span>${catBadge}
     </div>
   </div>`;
 }
@@ -752,9 +761,30 @@ function routeItemHtml(r) {
 // Render the year → trip → items tree
 function renderTripsTree() {
   const list = document.getElementById('content-list');
-  if (trips.length === 0 && places.every(p => !p.tripId) && routes.every(r => !r.tripId)) {
-    list.innerHTML = '<div class="list-empty">尚無行程<br>點上方「新增行程」建立你的第一個行程</div>';
+  const wishPlaces = places.filter(p => p.wishlist);
+  const realPlaces = places.filter(p => !p.wishlist);  // visited/normal places
+
+  if (trips.length === 0 && realPlaces.every(p => !p.tripId) && routes.every(r => !r.tripId) && wishPlaces.length === 0) {
+    list.innerHTML = '<div class="list-empty">尚無行程<br>點上方「新增行程」建立你的第一個行程<br>或在新增地點時勾選「想去的地方」</div>';
     return;
+  }
+
+  let html = '';
+
+  // ── 想去的地方 group (all wishlist places, regardless of their tripId) ──
+  if (wishPlaces.length > 0) {
+    const collapsed = collapsedYears.has('__wishlist__');
+    html += `<div class="year-group">
+      <div class="wishlist-header${collapsed ? ' collapsed' : ''}" onclick="toggleYear('__wishlist__')">
+        <svg class="icon chev"><use href="#icon-chevron-left"/></svg>
+        <svg class="icon" style="width:14px;height:14px;color:#1a1a1a;"><use href="#pin-heart"/></svg>
+        想去的地方
+        <span class="year-count">${wishPlaces.length} 個</span>
+      </div>`;
+    if (!collapsed) {
+      html += wishPlaces.map(p => placeItemHtml(p)).join('');
+    }
+    html += `</div>`;
   }
 
   // Group trips by year
@@ -763,11 +793,9 @@ function renderTripsTree() {
     const y = tripYear(t);
     (byYear[y] = byYear[y] || []).push(t);
   });
-  // Sort years descending, trips within a year by start date descending
   const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
   years.forEach(y => byYear[y].sort((a, b) => (b.start || '').localeCompare(a.start || '')));
 
-  let html = '';
   years.forEach(y => {
     const collapsed = collapsedYears.has(y);
     html += `<div class="year-group">
@@ -778,7 +806,8 @@ function renderTripsTree() {
       </div>`;
     if (!collapsed) {
       byYear[y].forEach(t => {
-        const tripPlaces = places.filter(p => p.tripId === t.id);
+        // Visited places only (wishlist places live in their own group)
+        const tripPlaces = realPlaces.filter(p => p.tripId === t.id);
         const tripRoutes = routes.filter(r => r.tripId === t.id);
         const expanded = selectedTripId === t.id;
         const dateStr = t.start ? (t.end && t.end !== t.start ? `${t.start} ~ ${t.end}` : t.start) : '';
@@ -807,8 +836,8 @@ function renderTripsTree() {
     html += `</div>`;
   });
 
-  // Unfiled (no trip) section
-  const unfiledPlaces = places.filter(p => !p.tripId);
+  // Unfiled (no trip, visited only) section
+  const unfiledPlaces = realPlaces.filter(p => !p.tripId);
   const unfiledRoutes = routes.filter(r => !r.tripId);
   if (unfiledPlaces.length > 0 || unfiledRoutes.length > 0) {
     const collapsed = collapsedYears.has('__unfiled__');
@@ -946,6 +975,8 @@ function openAddModal(prefillName) {
   document.getElementById('f-note').value = '';
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('f-tag').value = '美食';
+  document.getElementById('f-wishlist').checked = false;
+  applyWishlistUI(false);
   // New place starts with the default icon/color for the default category
   pendingIcon = TAG_DEFAULT_ICON['美食'];
   pendingColor = TAG_DEFAULT_COLOR['美食'];
@@ -954,9 +985,17 @@ function openAddModal(prefillName) {
   refreshTripDropdowns();
   // If adding while a trip is expanded in trips view, pre-select that trip
   const fTrip = document.getElementById('f-trip');
-  if (fTrip) fTrip.value = (viewMode === 'trips' && selectedTripId) ? selectedTripId : '';
+  if (fTrip) fTrip.value = (viewMode === 'trips' && selectedTripId && selectedTripId !== '__wishlist__') ? selectedTripId : '';
   document.getElementById('add-modal').classList.remove('hidden');
   if (!prefillName) setTimeout(() => document.getElementById('f-name').focus(), 50);
+}
+
+// Toggle UI hints when "want to go" is checked (date label becomes optional/planned)
+window.onWishlistToggle = function() {
+  applyWishlistUI(document.getElementById('f-wishlist').checked);
+};
+function applyWishlistUI(isWish) {
+  document.getElementById('f-date-label').textContent = isWish ? '預計造訪日期（可不填）' : '造訪日期';
 }
 
 // Icon / color picker state and rendering
@@ -998,6 +1037,7 @@ window.savePlace = async function() {
     icon:  pendingIcon,
     color: pendingColor,
     tripId: document.getElementById('f-trip').value || '',
+    wishlist: document.getElementById('f-wishlist').checked,
   };
   if (editingPlaceId) {
     await updatePlace(editingPlaceId, data);
@@ -1045,16 +1085,15 @@ function searchAndSaveRoute(origin, dest, name, transport, triggerBtnId) {
 
     if (status !== google.maps.DirectionsStatus.OK) {
       if (transport === 'train') {
-        const retry = confirm('找不到電車路線（部分地區大眾運輸資料不完整）。\n要改用開車路線替代嗎？');
+        const retry = confirm('找不到電車路線。\n\n可能原因：部分日本地區的大眾運輸路線資料不完整，或起訖點離車站較遠。\n\n要改用開車路線替代嗎？（之後可在路線資料裡手動改成電車）');
         if (retry) {
           directionsService.route(
             { origin, destination: dest, travelMode: google.maps.TravelMode.DRIVING, region: 'jp' },
             async (result2, status2) => {
               if (status2 !== google.maps.DirectionsStatus.OK) {
-                alert('找不到路線，請確認起點和終點名稱是否正確。'); return;
+                alert('連開車路線也找不到，請確認起點和終點是否正確，或試試輸入完整車站名（例如「鎌倉駅」）。'); return;
               }
               await saveRouteFromResult(result2, name, 'drive');
-              clearTopRouteInputs();
             }
           );
         }
@@ -1064,7 +1103,6 @@ function searchAndSaveRoute(origin, dest, name, transport, triggerBtnId) {
       return;
     }
     await saveRouteFromResult(result, name, transport);
-    clearTopRouteInputs();
   });
 }
 
@@ -1093,13 +1131,61 @@ async function saveRouteFromResult(result, name, transport) {
     sampled.push(points[points.length - 1]);
   }
 
-  await addRoute({ name, transport, points: sampled });
-  if (activeTab !== 'routes') switchTab('routes');
-
+  // Show the computed route on the map as a preview while the user fills in details
   directionsRenderer.setMap(map);
   directionsRenderer.setDirections(result);
   directionsRenderer.setOptions({ polylineOptions: { strokeColor: t.color, strokeWeight: 4, strokeOpacity: 0.6 } });
-  setTimeout(() => directionsRenderer.setMap(null), 4000);
+
+  // Stash the route data and open the details form to collect category/date/note/trip
+  pendingRoute = { name, transport, points: sampled };
+  openRouteDetailsModal(name);
+}
+
+// ── Route details modal (filled in after a route is computed) ──
+function openRouteDetailsModal(defaultName) {
+  document.getElementById('rd-name').value = defaultName || '';
+  document.getElementById('rd-cat').value = ROUTE_CATEGORIES[0];
+  document.getElementById('rd-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('rd-note').value = '';
+  refreshRouteTripDropdown();
+  const rdTrip = document.getElementById('rd-trip');
+  if (rdTrip) rdTrip.value = (viewMode === 'trips' && selectedTripId && selectedTripId !== '__wishlist__') ? selectedTripId : '';
+  document.getElementById('route-details-modal').classList.remove('hidden');
+}
+
+window.closeRouteDetailsModal = function() {
+  document.getElementById('route-details-modal').classList.add('hidden');
+  directionsRenderer.setMap(null);
+  pendingRoute = null;
+};
+
+window.saveRouteDetails = async function() {
+  if (!pendingRoute) return;
+  const name = document.getElementById('rd-name').value.trim() || pendingRoute.name;
+  const data = {
+    name,
+    transport: pendingRoute.transport,
+    points: pendingRoute.points,
+    cat:   document.getElementById('rd-cat').value,
+    date:  document.getElementById('rd-date').value,
+    note:  document.getElementById('rd-note').value.trim(),
+    tripId: document.getElementById('rd-trip').value || '',
+  };
+  await addRoute(data);
+  directionsRenderer.setMap(null);
+  pendingRoute = null;
+  document.getElementById('route-details-modal').classList.add('hidden');
+  clearTopRouteInputs();
+  if (viewMode === 'all' && activeTab !== 'routes') switchTab('routes');
+}
+
+// Populate trip dropdown in the route details modal
+function refreshRouteTripDropdown() {
+  const sorted = [...trips].sort((a, b) => (b.start || '').localeCompare(a.start || ''));
+  const opts = '<option value="">未分類</option>' +
+    sorted.map(t => `<option value="${t.id}">${esc(t.name)}${t.start ? ' (' + t.start + ')' : ''}</option>`).join('');
+  const rdTrip = document.getElementById('rd-trip');
+  if (rdTrip) { const v = rdTrip.value; rdTrip.innerHTML = opts; rdTrip.value = v; }
 }
 
 // ══════════════════════════════════════
