@@ -109,12 +109,16 @@ const MARKER_MAX_SCALE = 11;
 
 // ── State ──
 let map, directionsService, directionsRenderer, autocompleteService, placesService;
-let currentUser, unsubscribePlaces, unsubscribeRoutes;
-let places = [], routes = [];
+let currentUser, unsubscribePlaces, unsubscribeRoutes, unsubscribeTrips;
+let places = [], routes = [], trips = [];
 let markers = {}, polylines = {};
 let mode = 'view', activeTab = 'places', currentFilter = '全部';
+let viewMode = 'all';            // 'all' (flat) | 'trips' (grouped by year)
+let selectedTripId = null;       // currently expanded/selected trip in trips view
+let collapsedYears = new Set();  // which year groups are collapsed
 let selectedPlaceId = null, selectedRouteId = null;
 let editingPlaceId = null, pendingLatLng = null;
+let editingTripId = null;        // for trip create/edit modal
 let pendingIcon = 'food', pendingColor = '#E8833A';  // for the icon/color picker in add/edit modal
 let drawingRoute = null, drawPolyline = null, drawPath = [];
 let pendingTransport = 'drive';   // for manual draw modal
@@ -184,6 +188,7 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById('login-screen').classList.remove('hidden');
     if (unsubscribePlaces) unsubscribePlaces();
     if (unsubscribeRoutes) unsubscribeRoutes();
+    if (unsubscribeTrips) unsubscribeTrips();
     clearMap();
   }
 });
@@ -422,6 +427,12 @@ function subscribeData() {
     syncRoutePolylines();
     renderList();
   });
+  const tq = query(collection(db, 'trips'), where('uid', '==', uid));
+  unsubscribeTrips = onSnapshot(tq, (snap) => {
+    trips = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    refreshTripDropdowns();
+    renderList();
+  });
 }
 
 async function addPlace(data) { await addDoc(collection(db, 'places'), { ...data, uid: currentUser.uid, createdAt: Date.now() }); }
@@ -429,6 +440,12 @@ async function updatePlace(id, data) { await updateDoc(doc(db, 'places', id), da
 async function deletePlace(id) { await deleteDoc(doc(db, 'places', id)); }
 async function addRoute(data) { await addDoc(collection(db, 'routes'), { ...data, uid: currentUser.uid, createdAt: Date.now() }); }
 async function deleteRoute(id) { await deleteDoc(doc(db, 'routes', id)); }
+async function addTrip(data) { return await addDoc(collection(db, 'trips'), { ...data, uid: currentUser.uid, createdAt: Date.now() }); }
+async function updateTrip(id, data) { await updateDoc(doc(db, 'trips', id), data); }
+async function deleteTrip(id) { await deleteDoc(doc(db, 'trips', id)); }
+
+// Year derived from a trip's start date
+function tripYear(t) { return (t.start || '').slice(0, 4) || '未定年份'; }
 
 // ══════════════════════════════════════
 // Markers & Polylines
@@ -473,7 +490,7 @@ function syncRoutePolylines() {
 function clearMap() {
   Object.values(markers).forEach(m => m.setMap(null));
   Object.values(polylines).forEach(p => p.setMap(null));
-  markers = {}; polylines = {}; places = []; routes = [];
+  markers = {}; polylines = {}; places = []; routes = []; trips = [];
 }
 
 // ══════════════════════════════════════
@@ -521,6 +538,8 @@ window.editSelectedPlace = function() {
   pendingColor = placeColor(p);
   renderIconPicker();
   renderColorPicker();
+  refreshTripDropdowns();
+  document.getElementById('f-trip').value = p.tripId || '';
   document.getElementById('add-modal').classList.remove('hidden');
 };
 
@@ -609,59 +628,237 @@ window.filterTag = function(el, tag) {
   renderList();
 };
 
+window.setViewMode = function(vm) {
+  viewMode = vm;
+  document.getElementById('vm-all').classList.toggle('active', vm === 'all');
+  document.getElementById('vm-trips').classList.toggle('active', vm === 'trips');
+  document.getElementById('all-view').classList.toggle('hidden', vm !== 'all');
+  document.getElementById('trips-view').classList.toggle('hidden', vm !== 'trips');
+  renderList();
+};
+
 // ══════════════════════════════════════
 // Render List
 // ══════════════════════════════════════
 function renderList() {
+  if (viewMode === 'trips') { renderTripsTree(); renderStats(); return; }
+
   const list = document.getElementById('content-list');
   if (activeTab === 'places') {
     const f = currentFilter === '全部' ? places : places.filter(p => p.tag === currentFilter);
     if (f.length === 0) {
       list.innerHTML = '<div class="list-empty">尚無地點記錄<br>用上方搜尋列或「新增」按鈕加入地點</div>';
     } else {
-      list.innerHTML = f.map(p => {
-        const sel = selectedPlaceId === p.id;
-        const delSel = deleteSelected.has(`place:${p.id}`);
-        const color = placeColor(p);
-        const iconKey = placeIcon(p);
-        return `<div class="place-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectPlace('${p.id}')">
-          ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
-          <div class="place-icon" style="background:${color};"><svg class="icon" style="color:#fff;"><use href="#pin-${iconKey}"/></svg></div>
-          <div class="place-info">
-            <div class="place-name">${esc(p.name)}</div>
-            <div class="place-meta">${p.date || ''}</div>
-            <span class="place-tag" style="background:${color}1f;color:${color};">${p.tag}</span>
-          </div>
-        </div>`;
-      }).join('');
+      list.innerHTML = f.map(p => placeItemHtml(p)).join('');
     }
   } else {
     if (routes.length === 0) {
       list.innerHTML = '<div class="list-empty">尚無路線記錄<br>用上方搜尋列規劃路線，或手動畫路線</div>';
     } else {
-      list.innerHTML = routes.map(r => {
-        const t = TRANSPORT[r.transport] || TRANSPORT.drive;
-        const sel = selectedRouteId === r.id;
-        const delSel = deleteSelected.has(`route:${r.id}`);
-        return `<div class="route-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectRoute('${r.id}')">
-          ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
-          <div class="route-swatch" style="background:${t.color};"></div>
-          <div class="route-info">
-            <div class="route-name">${esc(r.name)}</div>
-            <div class="route-meta">${(r.points || []).length} 個節點</div>
-            <span class="transport-badge" style="background:${t.color}22;color:${t.color};">${t.label}</span>
-          </div>
-        </div>`;
-      }).join('');
+      list.innerHTML = routes.map(r => routeItemHtml(r)).join('');
     }
   }
   renderStats();
 }
 
+function placeItemHtml(p) {
+  const sel = selectedPlaceId === p.id;
+  const delSel = deleteSelected.has(`place:${p.id}`);
+  const color = placeColor(p);
+  const iconKey = placeIcon(p);
+  return `<div class="place-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectPlace('${p.id}')">
+    ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
+    <div class="place-icon" style="background:${color};"><svg class="icon" style="color:#fff;"><use href="#pin-${iconKey}"/></svg></div>
+    <div class="place-info">
+      <div class="place-name">${esc(p.name)}</div>
+      <div class="place-meta">${p.date || ''}</div>
+      <span class="place-tag" style="background:${color}1f;color:${color};">${p.tag}</span>
+    </div>
+  </div>`;
+}
+
+function routeItemHtml(r) {
+  const t = TRANSPORT[r.transport] || TRANSPORT.drive;
+  const sel = selectedRouteId === r.id;
+  const delSel = deleteSelected.has(`route:${r.id}`);
+  return `<div class="route-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectRoute('${r.id}')">
+    ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
+    <div class="route-swatch" style="background:${t.color};"></div>
+    <div class="route-info">
+      <div class="route-name">${esc(r.name)}</div>
+      <div class="route-meta">${(r.points || []).length} 個節點</div>
+      <span class="transport-badge" style="background:${t.color}22;color:${t.color};">${t.label}</span>
+    </div>
+  </div>`;
+}
+
+// Render the year → trip → items tree
+function renderTripsTree() {
+  const list = document.getElementById('content-list');
+  if (trips.length === 0 && places.every(p => !p.tripId) && routes.every(r => !r.tripId)) {
+    list.innerHTML = '<div class="list-empty">尚無行程<br>點上方「新增行程」建立你的第一個行程</div>';
+    return;
+  }
+
+  // Group trips by year
+  const byYear = {};
+  trips.forEach(t => {
+    const y = tripYear(t);
+    (byYear[y] = byYear[y] || []).push(t);
+  });
+  // Sort years descending, trips within a year by start date descending
+  const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  years.forEach(y => byYear[y].sort((a, b) => (b.start || '').localeCompare(a.start || '')));
+
+  let html = '';
+  years.forEach(y => {
+    const collapsed = collapsedYears.has(y);
+    html += `<div class="year-group">
+      <div class="year-header${collapsed ? ' collapsed' : ''}" onclick="toggleYear('${y}')">
+        <svg class="icon chev"><use href="#icon-chevron-left"/></svg>
+        ${y} 年
+        <span class="year-count">${byYear[y].length} 個行程</span>
+      </div>`;
+    if (!collapsed) {
+      byYear[y].forEach(t => {
+        const tripPlaces = places.filter(p => p.tripId === t.id);
+        const tripRoutes = routes.filter(r => r.tripId === t.id);
+        const expanded = selectedTripId === t.id;
+        const dateStr = t.start ? (t.end && t.end !== t.start ? `${t.start} ~ ${t.end}` : t.start) : '';
+        html += `<div class="trip-folder">
+          <div class="trip-header${expanded ? ' selected' : ''}" onclick="toggleTrip('${t.id}')">
+            <svg class="trip-folder-icon icon"><use href="#pin-star"/></svg>
+            <div style="flex:1;min-width:0;">
+              <div class="trip-name">${esc(t.name)}</div>
+              <div class="trip-dates">${dateStr} · ${tripPlaces.length} 地點 / ${tripRoutes.length} 路線</div>
+            </div>
+            <button class="trip-edit-btn" onclick="event.stopPropagation();editTrip('${t.id}')"><svg class="icon"><use href="#icon-edit"/></svg></button>
+          </div>`;
+        if (expanded) {
+          html += '<div class="trip-children">';
+          if (tripPlaces.length === 0 && tripRoutes.length === 0) {
+            html += '<div class="list-empty" style="padding:10px 14px;">此行程尚無地點或路線</div>';
+          } else {
+            html += tripPlaces.map(p => placeItemHtml(p)).join('');
+            html += tripRoutes.map(r => routeItemHtml(r)).join('');
+          }
+          html += '</div>';
+        }
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+  });
+
+  // Unfiled (no trip) section
+  const unfiledPlaces = places.filter(p => !p.tripId);
+  const unfiledRoutes = routes.filter(r => !r.tripId);
+  if (unfiledPlaces.length > 0 || unfiledRoutes.length > 0) {
+    const collapsed = collapsedYears.has('__unfiled__');
+    html += `<div class="year-group">
+      <div class="unfiled-header${collapsed ? ' collapsed' : ''}" onclick="toggleYear('__unfiled__')">
+        <svg class="icon chev"><use href="#icon-chevron-left"/></svg>
+        未分類
+        <span class="year-count">${unfiledPlaces.length + unfiledRoutes.length} 項</span>
+      </div>`;
+    if (!collapsed) {
+      html += unfiledPlaces.map(p => placeItemHtml(p)).join('');
+      html += unfiledRoutes.map(r => routeItemHtml(r)).join('');
+    }
+    html += `</div>`;
+  }
+
+  list.innerHTML = html;
+}
+
+window.toggleYear = function(y) {
+  if (collapsedYears.has(y)) collapsedYears.delete(y);
+  else collapsedYears.add(y);
+  renderTripsTree();
+};
+
+window.toggleTrip = function(id) {
+  selectedTripId = selectedTripId === id ? null : id;
+  renderTripsTree();
+};
+
 function renderStats() {
   document.getElementById('st-places').textContent = places.length;
   document.getElementById('st-routes').textContent = routes.length;
+  const st = document.getElementById('st-trips');
+  if (st) st.textContent = trips.length;
 }
+
+// ══════════════════════════════════════
+// Trips
+// ══════════════════════════════════════
+// Populate the trip <select> dropdowns in place/route modals
+function refreshTripDropdowns() {
+  const sorted = [...trips].sort((a, b) => (b.start || '').localeCompare(a.start || ''));
+  const opts = '<option value="">未分類</option>' +
+    sorted.map(t => `<option value="${t.id}">${esc(t.name)}${t.start ? ' (' + t.start + ')' : ''}</option>`).join('');
+  const fTrip = document.getElementById('f-trip');
+  const rTrip = document.getElementById('r-trip');
+  if (fTrip) { const v = fTrip.value; fTrip.innerHTML = opts; fTrip.value = v; }
+  if (rTrip) { const v = rTrip.value; rTrip.innerHTML = opts; rTrip.value = v; }
+}
+
+window.openTripModal = function() {
+  editingTripId = null; window._editingTripId = null;
+  document.getElementById('trip-modal-title').textContent = '新增行程';
+  document.getElementById('tp-name').value = '';
+  document.getElementById('tp-start').value = '';
+  document.getElementById('tp-end').value = '';
+  document.getElementById('trip-delete-btn').classList.add('hidden');
+  document.getElementById('trip-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('tp-name').focus(), 50);
+};
+
+window.editTrip = function(id) {
+  const t = trips.find(x => x.id === id);
+  if (!t) return;
+  editingTripId = id; window._editingTripId = id;
+  document.getElementById('trip-modal-title').textContent = '編輯行程';
+  document.getElementById('tp-name').value = t.name || '';
+  document.getElementById('tp-start').value = t.start || '';
+  document.getElementById('tp-end').value = t.end || '';
+  document.getElementById('trip-delete-btn').classList.remove('hidden');
+  document.getElementById('trip-modal').classList.remove('hidden');
+};
+
+window.closeTripModal = function() {
+  document.getElementById('trip-modal').classList.add('hidden');
+  editingTripId = null; window._editingTripId = null;
+};
+
+window.saveTrip = async function() {
+  const name = document.getElementById('tp-name').value.trim();
+  if (!name) { document.getElementById('tp-name').focus(); return; }
+  const start = document.getElementById('tp-start').value;
+  const end = document.getElementById('tp-end').value;
+  // If only one date given, mirror it so the trip still has a year
+  const data = { name, start: start || end || '', end: end || start || '' };
+  if (editingTripId) {
+    await updateTrip(editingTripId, data);
+  } else {
+    const ref = await addTrip(data);
+    selectedTripId = ref.id;  // expand the newly created trip
+  }
+  closeTripModal();
+};
+
+// Delete a trip — its places/routes become unfiled (tripId cleared), not deleted
+window.deleteTripById = async function(id) {
+  if (!id) return;
+  if (!confirm('確定刪除這個行程嗎？行程內的地點和路線會變回「未分類」，不會被刪除。')) return;
+  for (const p of places.filter(x => x.tripId === id)) await updatePlace(p.id, { tripId: '' });
+  for (const r of routes.filter(x => x.tripId === id)) await updateRoute(r.id, { tripId: '' });
+  await deleteTrip(id);
+  if (selectedTripId === id) selectedTripId = null;
+  closeTripModal();
+};
+
+async function updateRoute(id, data) { await updateDoc(doc(db, 'routes', id), data); }
 
 // ══════════════════════════════════════
 // Add / Edit Place
@@ -677,6 +874,10 @@ function openAddModal(prefillName) {
   pendingColor = TAG_DEFAULT_COLOR['美食'];
   renderIconPicker();
   renderColorPicker();
+  refreshTripDropdowns();
+  // If adding while a trip is expanded in trips view, pre-select that trip
+  const fTrip = document.getElementById('f-trip');
+  if (fTrip) fTrip.value = (viewMode === 'trips' && selectedTripId) ? selectedTripId : '';
   document.getElementById('add-modal').classList.remove('hidden');
   if (!prefillName) setTimeout(() => document.getElementById('f-name').focus(), 50);
 }
@@ -719,6 +920,7 @@ window.savePlace = async function() {
     note:  document.getElementById('f-note').value.trim(),
     icon:  pendingIcon,
     color: pendingColor,
+    tripId: document.getElementById('f-trip').value || '',
   };
   if (editingPlaceId) {
     await updatePlace(editingPlaceId, data);
@@ -752,6 +954,9 @@ window.openRouteModal = function() {
   document.querySelectorAll('.transport-option').forEach(el => el.classList.remove('selected'));
   document.getElementById('t-drive').classList.add('selected');
   document.getElementById('r-name').value = '';
+  refreshTripDropdowns();
+  const rTrip = document.getElementById('r-trip');
+  if (rTrip) rTrip.value = (viewMode === 'trips' && selectedTripId) ? selectedTripId : '';
   document.getElementById('route-modal').classList.remove('hidden');
 };
 
@@ -765,7 +970,8 @@ window.closeRouteModal = function() { document.getElementById('route-modal').cla
 
 function startDrawing() {
   const name = document.getElementById('r-name').value.trim() || '未命名路線';
-  drawingRoute = { name, transport: pendingTransport };
+  const tripId = document.getElementById('r-trip').value || '';
+  drawingRoute = { name, transport: pendingTransport, tripId };
   drawPath = [];
   if (drawPolyline) { drawPolyline.setMap(null); drawPolyline = null; }
   closeRouteModal();
@@ -785,12 +991,12 @@ function addDrawPoint(latLng) {
 
 async function finishDrawing() {
   if (drawPath.length >= 2 && drawingRoute) {
-    await addRoute({ name: drawingRoute.name, transport: drawingRoute.transport, points: drawPath });
+    await addRoute({ name: drawingRoute.name, transport: drawingRoute.transport, points: drawPath, tripId: drawingRoute.tripId || '' });
   }
   if (drawPolyline) { drawPolyline.setMap(null); drawPolyline = null; }
   drawPath = []; drawingRoute = null;
   setMode('view');
-  if (activeTab !== 'routes') switchTab('routes');
+  if (viewMode === 'all' && activeTab !== 'routes') switchTab('routes');
 }
 
 // ══════════════════════════════════════

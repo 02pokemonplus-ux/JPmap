@@ -99,20 +99,35 @@
         <button class="tool-btn" id="btn-delete" onclick="setMode('delete')"><svg class="icon"><use href="#icon-trash"/></svg>刪除</button>
       </div>
 
-      <div id="tab-bar">
-        <div class="tab active" id="tab-places" onclick="switchTab('places')">地點</div>
-        <div class="tab" id="tab-routes" onclick="switchTab('routes')">路線</div>
+      <!-- View mode: 全部 (flat) vs 行程 (grouped by year) -->
+      <div id="view-mode-bar">
+        <button id="vm-all" class="active" onclick="setViewMode('all')">全部</button>
+        <button id="vm-trips" onclick="setViewMode('trips')">依年份 / 行程</button>
       </div>
 
-      <div id="filter-bar">
-        <button class="tag-filter active" onclick="filterTag(this,'全部')">全部</button>
-        <button class="tag-filter" onclick="filterTag(this,'美食')">美食</button>
-        <button class="tag-filter" onclick="filterTag(this,'神社')">神社</button>
-        <button class="tag-filter" onclick="filterTag(this,'自然')">自然</button>
-        <button class="tag-filter" onclick="filterTag(this,'文化')">文化</button>
-        <button class="tag-filter" onclick="filterTag(this,'購物')">購物</button>
-        <button class="tag-filter" onclick="filterTag(this,'住宿')">住宿</button>
-        <button class="tag-filter" onclick="filterTag(this,'交通')">交通</button>
+      <!-- ALL mode: places/routes tabs + tag filter (original behavior) -->
+      <div id="all-view">
+        <div id="tab-bar">
+          <div class="tab active" id="tab-places" onclick="switchTab('places')">地點</div>
+          <div class="tab" id="tab-routes" onclick="switchTab('routes')">路線</div>
+        </div>
+        <div id="filter-bar">
+          <button class="tag-filter active" onclick="filterTag(this,'全部')">全部</button>
+          <button class="tag-filter" onclick="filterTag(this,'美食')">美食</button>
+          <button class="tag-filter" onclick="filterTag(this,'神社')">神社</button>
+          <button class="tag-filter" onclick="filterTag(this,'自然')">自然</button>
+          <button class="tag-filter" onclick="filterTag(this,'文化')">文化</button>
+          <button class="tag-filter" onclick="filterTag(this,'購物')">購物</button>
+          <button class="tag-filter" onclick="filterTag(this,'住宿')">住宿</button>
+          <button class="tag-filter" onclick="filterTag(this,'交通')">交通</button>
+        </div>
+      </div>
+
+      <!-- TRIPS mode: new trip button -->
+      <div id="trips-view" class="hidden">
+        <div id="trips-toolbar">
+          <button id="new-trip-btn" onclick="openTripModal()"><svg class="icon"><use href="#icon-plus"/></svg> 新增行程</button>
+        </div>
       </div>
 
       <!-- Delete mode bar -->
@@ -129,6 +144,7 @@
       <div id="stats-bar">
         <div class="stat">地點 <span id="st-places">0</span></div>
         <div class="stat">路線 <span id="st-routes">0</span></div>
+        <div class="stat">行程 <span id="st-trips">0</span></div>
       </div>
     </div>
   </div>
@@ -234,6 +250,9 @@
       <div id="color-picker"></div>
     </div>
     <div class="form-row"><label>造訪日期</label><input type="date" id="f-date"></div>
+    <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
+      <select id="f-trip"><option value="">未分類</option></select>
+    </div>
     <div class="form-row"><label>筆記</label><textarea id="f-note" placeholder="記錄感受、推薦理由..."></textarea></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">取消</button>
@@ -262,10 +281,28 @@
     </div>
 
     <div class="form-row" style="margin-top:12px;"><label>路線名稱</label><input type="text" id="r-name" placeholder="例：嵐山散步路線"></div>
+    <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
+      <select id="r-trip"><option value="">未分類</option></select>
+    </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeRouteModal()">取消</button>
       <button class="btn-primary" onclick="startDrawing()">開始畫路線</button>
     </div>
+  </div>
+</div>
+
+<!-- Trip Create/Edit Modal -->
+<div id="trip-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 id="trip-modal-title">新增行程</h3>
+    <div class="form-row"><label>行程名稱</label><input type="text" id="tp-name" placeholder="例：京都賞楓之旅"></div>
+    <div class="form-row"><label>開始日期</label><input type="date" id="tp-start"></div>
+    <div class="form-row"><label>結束日期</label><input type="date" id="tp-end"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeTripModal()">取消</button>
+      <button class="btn-primary" onclick="saveTrip()">儲存</button>
+    </div>
+    <button id="trip-delete-btn" class="hidden" onclick="deleteTripById(window._editingTripId)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;background:none;border:none;color:#C0392B;cursor:pointer;">刪除此行程</button>
   </div>
 </div>
 
