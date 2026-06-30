@@ -34,6 +34,73 @@ const TAG_STYLE = {
   '住宿': { bg: '#E8F0FE', text: '#1A3A7A' },
   '交通': { bg: '#FCE8E6', text: '#8C2D1E' },
 };
+
+// Icon catalog — keys map to SVG symbol ids in index.html (pin-*).
+// Each entry has a label and the inner SVG path markup (used to build map marker data-URIs).
+const ICON_CATALOG = {
+  pin:      { label: '圖釘' },
+  food:     { label: '美食' },
+  cafe:     { label: '咖啡' },
+  shrine:   { label: '神社' },
+  castle:   { label: '城堡' },
+  nature:   { label: '自然' },
+  shopping: { label: '購物' },
+  lodging:  { label: '住宿' },
+  station:  { label: '車站' },
+  camera:   { label: '景點' },
+  heart:    { label: '愛心' },
+  star:     { label: '星星' },
+};
+
+// Default icon per category
+const TAG_DEFAULT_ICON = {
+  '美食': 'food', '神社': 'shrine', '自然': 'nature', '文化': 'castle',
+  '購物': 'shopping', '住宿': 'lodging', '交通': 'station',
+};
+// Default color per category
+const TAG_DEFAULT_COLOR = {
+  '美食': '#E8833A', '神社': '#0E8A6E', '自然': '#4C9A2A', '文化': '#6C5CE7',
+  '購物': '#D6336C', '住宿': '#2B7DE9', '交通': '#C0392B',
+};
+
+// Color palette for the picker (8-10 common colors)
+const COLOR_PALETTE = ['#E0392B', '#E8833A', '#F1B807', '#4C9A2A', '#0E8A6E', '#2B7DE9', '#6C5CE7', '#D6336C', '#7A5C3E', '#566573'];
+
+// Raw SVG inner markup for each icon, used to render map markers as data-URIs.
+// (Kept minimal — white stroke on a colored circle.)
+const ICON_SVG_PATHS = {
+  pin:      '<path d="M12 21c-3.5-3.5-7-6.93-7-11a7 7 0 0 1 14 0c0 4.07-3.5 7.5-7 11Z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="#fff" stroke-width="1.8"/>',
+  food:     '<path d="M6 3v7a2 2 0 0 0 2 2v9M6 3v5M9 3v5M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4v9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  cafe:     '<path d="M5 8h12v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8ZM17 9h2a2 2 0 0 1 0 4h-2M7 3v2M10 3v2M13 3v2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  shrine:   '<path d="M3 7h18M4 7l1-2.5h14L20 7M6 7v13M18 7v13M5 11h14" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  castle:   '<path d="M4 21V8l2 1V6l2 1V5l2 1V4h4v2l2-1v2l2-1v3l2-1v13M4 21h16M9 21v-4a3 3 0 0 1 6 0v4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  nature:   '<path d="M12 3 5 13h4l-3 5h12l-3-5h4L12 3ZM12 18v3" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  shopping: '<path d="M6 8h12l-1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 8ZM9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  lodging:  '<path d="M3 18v-6a2 2 0 0 1 2-2h10a4 4 0 0 1 4 4v4M3 14h16M3 18v2M21 14v6M7 10V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  station:  '<rect x="5" y="3" width="14" height="13" rx="3" fill="none" stroke="#fff" stroke-width="1.7"/><line x1="5" y1="10" x2="19" y2="10" stroke="#fff" stroke-width="1.7"/><circle cx="9" cy="13.2" r="1" fill="#fff"/><circle cx="15" cy="13.2" r="1" fill="#fff"/><line x1="8.5" y1="16" x2="7" y2="20" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><line x1="15.5" y1="16" x2="17" y2="20" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>',
+  camera:   '<path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.2" fill="none" stroke="#fff" stroke-width="1.6"/>',
+  heart:    '<path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10Z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>',
+  star:     '<path d="m12 3 2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.8 6.7 19.6l1.1-6L3.4 9.4l6-.8L12 3Z" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>',
+};
+
+// Resolve a place's effective icon and color (custom overrides, else category default, else fallback)
+function placeIcon(p) { return p.icon || TAG_DEFAULT_ICON[p.tag] || 'pin'; }
+function placeColor(p) { return p.color || TAG_DEFAULT_COLOR[p.tag] || '#566573'; }
+
+// Build a Google Maps marker icon (data-URI SVG): colored teardrop pin with white glyph inside.
+function buildMarkerIcon(iconKey, color, scale) {
+  const glyph = ICON_SVG_PATHS[iconKey] || ICON_SVG_PATHS.pin;
+  const size = Math.round(scale * 4.2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="11" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+    <g transform="translate(2.6 2.6) scale(0.78)">${glyph}</g>
+  </svg>`;
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(size, size),
+    anchor: new google.maps.Point(size / 2, size / 2),
+  };
+}
 // Marker base scale at zoom 14; scales down/up with zoom level
 const MARKER_BASE_ZOOM = 14;
 const MARKER_BASE_SCALE = 8;
@@ -48,6 +115,7 @@ let markers = {}, polylines = {};
 let mode = 'view', activeTab = 'places', currentFilter = '全部';
 let selectedPlaceId = null, selectedRouteId = null;
 let editingPlaceId = null, pendingLatLng = null;
+let pendingIcon = 'food', pendingColor = '#E8833A';  // for the icon/color picker in add/edit modal
 let drawingRoute = null, drawPolyline = null, drawPath = [];
 let pendingTransport = 'drive';   // for manual draw modal
 let topTransport = 'drive';       // for top search bar route mode
@@ -135,9 +203,7 @@ function initGoogleMap() {
     fullscreenControl: false,
     zoomControl: false,
     gestureHandling: 'greedy',
-    styles: [
-      { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    ]
+    clickableIcons: true,  // keep Google's POI icons clickable
   });
 
   directionsService = new google.maps.DirectionsService();
@@ -146,6 +212,17 @@ function initGoogleMap() {
   placesService = new google.maps.places.PlacesService(map);
 
   map.addListener('click', (e) => {
+    // If a built-in POI was clicked, e.placeId is set — show our own info card instead of Google's
+    if (e.placeId) {
+      e.stop();  // prevent Google's default POI info window
+      if (mode === 'pin') {
+        // In pin mode, clicking a POI directly adds it (with its real name)
+        handlePoiClick(e.placeId, e.latLng, true);
+      } else {
+        handlePoiClick(e.placeId, e.latLng, false);
+      }
+      return;
+    }
     if (mode === 'pin') {
       pendingLatLng = e.latLng;
       editingPlaceId = null;
@@ -164,6 +241,52 @@ function initGoogleMap() {
 
   setupTopSearch();
 }
+
+// Handle clicking a built-in Google POI icon: fetch details, show info card with "新增至地圖"
+function handlePoiClick(placeId, latLng, addImmediately) {
+  placesService.getDetails(
+    { placeId, fields: ['name', 'geometry', 'formatted_address', 'rating', 'user_ratings_total'] },
+    (place, status) => {
+      if (status !== google.maps.places.PlacesServiceStatus.OK || !place) return;
+      const loc = place.geometry?.location || latLng;
+      if (addImmediately) {
+        pendingLatLng = loc;
+        editingPlaceId = null;
+        openAddModal(place.name);
+        return;
+      }
+      showPoiCard(place, loc);
+    }
+  );
+}
+
+let poiCardData = null;
+function showPoiCard(place, loc) {
+  poiCardData = { name: place.name, loc };
+  document.getElementById('poi-card-name').textContent = place.name || '未命名地點';
+  const addr = place.formatted_address || '';
+  let metaHtml = addr ? `<div class="poi-card-addr">${esc(addr)}</div>` : '';
+  if (place.rating) {
+    metaHtml += `<div class="poi-card-rating">★ ${place.rating} <span style="color:#aaa;">(${place.user_ratings_total || 0})</span></div>`;
+  }
+  document.getElementById('poi-card-meta').innerHTML = metaHtml;
+  const card = document.getElementById('poi-card');
+  card.classList.remove('hidden');
+  map.panTo(loc);
+}
+
+window.closePoiCard = function() {
+  document.getElementById('poi-card').classList.add('hidden');
+  poiCardData = null;
+};
+
+window.addPoiToMap = function() {
+  if (!poiCardData) return;
+  pendingLatLng = poiCardData.loc;
+  editingPlaceId = null;
+  openAddModal(poiCardData.name);
+  closePoiCard();
+};
 
 function markerScaleForZoom() {
   const zoom = map.getZoom() || MARKER_BASE_ZOOM;
@@ -311,16 +434,12 @@ function syncPlaceMarkers() {
   Object.keys(markers).forEach(id => { if (!ids.has(id)) { markers[id].setMap(null); delete markers[id]; } });
   const scale = markerScaleForZoom();
   places.forEach(p => {
-    const s = TAG_STYLE[p.tag] || { bg: '#E6F1FB', text: '#185FA5' };
     const sel = selectedPlaceId === p.id;
-    const icon = {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: s.bg, fillOpacity: 1,
-      strokeColor: s.text, strokeWeight: sel ? 2.5 : 1.5,
-      scale: sel ? scale * 1.3 : scale,
-    };
-    if (markers[p.id]) { markers[p.id].setIcon(icon); return; }
-    const marker = new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, title: p.name, icon });
+    const iconKey = placeIcon(p);
+    const color = placeColor(p);
+    const icon = buildMarkerIcon(iconKey, color, sel ? scale * 1.35 : scale);
+    if (markers[p.id]) { markers[p.id].setIcon(icon); markers[p.id].setZIndex(sel ? 999 : 1); return; }
+    const marker = new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, title: p.name, icon, zIndex: sel ? 999 : 1 });
     marker.addListener('click', () => selectPlace(p.id));
     markers[p.id] = marker;
   });
@@ -361,10 +480,10 @@ function selectPlace(id) {
   selectedPlaceId = id; selectedRouteId = null;
   const p = places.find(x => x.id === id);
   if (!p) return;
-  const s = TAG_STYLE[p.tag] || {};
+  const color = placeColor(p);
   document.getElementById('info-name').textContent = p.name;
   document.getElementById('info-meta').innerHTML =
-    `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:${s.bg};color:${s.text};margin-right:6px;">${p.tag}</span>${p.date || ''}`;
+    `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:${color}22;color:${color};margin-right:6px;">${p.tag}</span>${p.date || ''}`;
   document.getElementById('info-note').textContent = p.note || '（尚無筆記）';
   document.getElementById('info-panel').classList.remove('hidden');
   syncPlaceMarkers(); renderList();
@@ -393,6 +512,11 @@ window.editSelectedPlace = function() {
   document.getElementById('f-tag').value = p.tag || '美食';
   document.getElementById('f-date').value = p.date || '';
   document.getElementById('f-note').value = p.note || '';
+  // Populate pickers with this place's effective icon/color
+  pendingIcon = placeIcon(p);
+  pendingColor = placeColor(p);
+  renderIconPicker();
+  renderColorPicker();
   document.getElementById('add-modal').classList.remove('hidden');
 };
 
@@ -492,16 +616,17 @@ function renderList() {
       list.innerHTML = '<div class="list-empty">尚無地點記錄<br>用上方搜尋列或「新增」按鈕加入地點</div>';
     } else {
       list.innerHTML = f.map(p => {
-        const s = TAG_STYLE[p.tag] || {};
         const sel = selectedPlaceId === p.id;
         const delSel = deleteSelected.has(`place:${p.id}`);
+        const color = placeColor(p);
+        const iconKey = placeIcon(p);
         return `<div class="place-item${sel ? ' selected' : ''}${delSel ? ' delete-selected' : ''}" onclick="selectPlace('${p.id}')">
           ${mode === 'delete' ? `<div class="delete-checkbox${delSel ? ' checked' : ''}"></div>` : ''}
-          <div class="place-icon" style="background:${s.bg};"><i class="ti ti-map-pin" style="font-size:13px;color:${s.text};"></i></div>
+          <div class="place-icon" style="background:${color};"><svg class="icon" style="color:#fff;"><use href="#pin-${iconKey}"/></svg></div>
           <div class="place-info">
             <div class="place-name">${esc(p.name)}</div>
             <div class="place-meta">${p.date || ''}</div>
-            <span class="place-tag" style="background:${s.bg};color:${s.text};">${p.tag}</span>
+            <span class="place-tag" style="background:${color}1f;color:${color};">${p.tag}</span>
           </div>
         </div>`;
       }).join('');
@@ -543,9 +668,42 @@ function openAddModal(prefillName) {
   document.getElementById('f-note').value = '';
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('f-tag').value = '美食';
+  // New place starts with the default icon/color for the default category
+  pendingIcon = TAG_DEFAULT_ICON['美食'];
+  pendingColor = TAG_DEFAULT_COLOR['美食'];
+  renderIconPicker();
+  renderColorPicker();
   document.getElementById('add-modal').classList.remove('hidden');
   if (!prefillName) setTimeout(() => document.getElementById('f-name').focus(), 50);
 }
+
+// Icon / color picker state and rendering
+function renderIconPicker() {
+  const wrap = document.getElementById('icon-picker');
+  wrap.innerHTML = Object.keys(ICON_CATALOG).map(key =>
+    `<div class="icon-choice${pendingIcon === key ? ' selected' : ''}" title="${ICON_CATALOG[key].label}" onclick="pickIcon('${key}')">
+      <svg class="icon"><use href="#pin-${key}"/></svg>
+    </div>`
+  ).join('');
+}
+function renderColorPicker() {
+  const wrap = document.getElementById('color-picker');
+  wrap.innerHTML = COLOR_PALETTE.map(c =>
+    `<div class="color-choice${pendingColor === c ? ' selected' : ''}" style="background:${c};color:${c};" onclick="pickColor('${c}')"></div>`
+  ).join('');
+}
+window.pickIcon = function(key) { pendingIcon = key; renderIconPicker(); };
+window.pickColor = function(c) { pendingColor = c; renderColorPicker(); };
+
+// When category changes, update icon/color to that category's defaults
+// (only if the user hasn't been manually overriding — simplest: always snap to new category default)
+window.onTagChange = function() {
+  const tag = document.getElementById('f-tag').value;
+  pendingIcon = TAG_DEFAULT_ICON[tag] || 'pin';
+  pendingColor = TAG_DEFAULT_COLOR[tag] || '#566573';
+  renderIconPicker();
+  renderColorPicker();
+};
 
 window.savePlace = async function() {
   const name = document.getElementById('f-name').value.trim();
@@ -555,6 +713,8 @@ window.savePlace = async function() {
     tag:   document.getElementById('f-tag').value,
     date:  document.getElementById('f-date').value,
     note:  document.getElementById('f-note').value.trim(),
+    icon:  pendingIcon,
+    color: pendingColor,
   };
   if (editingPlaceId) {
     await updatePlace(editingPlaceId, data);
