@@ -204,14 +204,14 @@ function setupAutocompleteInput(inputId, resultsId, onPlaceSelected, textOnly) {
     const val = input.value.trim();
     if (!val) { results.classList.add('hidden'); return; }
     t = setTimeout(() => {
-      // No country/type restriction on the query itself — this lets Chinese, English,
-      // or Japanese keywords all match (e.g. "精靈寶可夢中心", "pokemon center", "ポケモンセンター").
-      // We bias toward Japan via location bias instead of hard-restricting country,
-      // since componentRestrictions can sometimes suppress valid brand-name matches.
+      // Bias toward Japan using country restriction (locationBias circle max is 50km,
+      // far too small to cover all of Japan, so componentRestrictions is the correct tool here).
+      // This still matches Chinese, English, or Japanese keywords (e.g. "精靈寶可夢中心",
+      // "pokemon center", "ポケモンセンター") as long as a matching place exists in Japan.
       const request = {
         input: val,
         language: 'zh-TW',
-        locationBias: { radius: 1500000, center: { lat: 36.2, lng: 138.5 } }, // covers all of Japan
+        componentRestrictions: { country: 'jp' },
       };
       autocompleteService.getPlacePredictions(request, (predictions, status) => {
         if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions || predictions.length === 0) {
@@ -463,6 +463,7 @@ window.setMode = function(m) {
 window.toggleSidebar = function() {
   sidebarOpen = !sidebarOpen;
   document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen);
+  document.getElementById('reopen-btn').classList.toggle('hidden', sidebarOpen);
 };
 
 window.switchTab = function(tab) {
@@ -797,6 +798,10 @@ function parseGoogleTimeline(data) {
   }
   return out;
 }
+
+window.zoomIn = function() { if (map) map.setZoom(map.getZoom() + 1); };
+window.zoomOut = function() { if (map) map.setZoom(map.getZoom() - 1); };
+window.recenterMap = function() { if (map) { map.panTo({ lat: 36.2, lng: 138.5 }); map.setZoom(5); } };
 
 // ── Expose globals ──
 window.selectPlace = selectPlace;
