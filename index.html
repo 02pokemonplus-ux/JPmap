@@ -5,15 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>日本旅遊地圖</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.31.0/webfont/tabler-icons.min.css">
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
 
+<!-- ═══════════ Inline SVG Icon Sprite (no external font dependency) ═══════════ -->
+<svg style="display:none">
+  <symbol id="icon-map-pin" viewBox="0 0 24 24"><path d="M12 21c-3.5-3.5-7-6.93-7-11a7 7 0 0 1 14 0c0 4.07-3.5 7.5-7 11Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="icon-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="5" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 19h7a3 3 0 0 0 3-3v0a3 3 0 0 0-3-3H9a3 3 0 0 1-3-3v0a3 3 0 0 1 3-3h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="20" y1="20" x2="15.3" y2="15.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .35 1.9l.06.06a2.1 2.1 0 1 1-2.96 2.96l-.06-.06a1.7 1.7 0 0 0-1.9-.35 1.7 1.7 0 0 0-1.03 1.56V19.7a2.1 2.1 0 1 1-4.2 0v-.1a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.9.35l-.06.06a2.1 2.1 0 1 1-2.96-2.96l.06-.06a1.7 1.7 0 0 0 .35-1.9 1.7 1.7 0 0 0-1.56-1.03H4.3a2.1 2.1 0 1 1 0-4.2h.1a1.7 1.7 0 0 0 1.56-1.1 1.7 1.7 0 0 0-.35-1.9l-.06-.06a2.1 2.1 0 1 1 2.96-2.96l.06.06a1.7 1.7 0 0 0 1.9.35h.08A1.7 1.7 0 0 0 11.6 3V2.9a2.1 2.1 0 1 1 4.2 0v.1a1.7 1.7 0 0 0 1.03 1.56h.08a1.7 1.7 0 0 0 1.9-.35l.06-.06a2.1 2.1 0 1 1 2.96 2.96l-.06.06a1.7 1.7 0 0 0-.35 1.9v.08A1.7 1.7 0 0 0 21 11.6h.1a2.1 2.1 0 1 1 0 4.2h-.1a1.7 1.7 0 0 0-1.56 1.03Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-hand-finger" viewBox="0 0 24 24"><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 12V4.5a1.5 1.5 0 0 1 3 0V12M14 12.5V6a1.5 1.5 0 0 1 3 0v8M17 11.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3.4L4 14.5a1.4 1.4 0 0 1 2-2L8 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m3 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7m4 4v6m6-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L13 14l-4 1 1-4 8.5-8.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-minus" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-current-location" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="1" x2="12" y2="4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="23" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="1" y1="12" x2="4" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="20" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="15 16 20 12 15 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="20" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 9 12 4 17 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="4" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-file-upload" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><line x1="12" y1="11" x2="12" y2="17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><polyline points="9.5 13.5 12 11 14.5 13.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-car" viewBox="0 0 24 24"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7.5" cy="17.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16.5" cy="17.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="icon-walk" viewBox="0 0 24 24"><circle cx="13" cy="4" r="1.8" fill="currentColor"/><path d="M10 8l3-1 3 2.5-1.5 2L17 14l-1 6M8 22l2-7-2-3 1-4M9 11l4 1 2 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-train" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><line x1="5" y1="10" x2="19" y2="10" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="13.2" r="1" fill="currentColor"/><circle cx="15" cy="13.2" r="1" fill="currentColor"/><line x1="8" y1="20" x2="6" y2="20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="16" y1="20" x2="18" y2="20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="8.5" y1="16" x2="7" y2="20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="15.5" y1="16" x2="17" y2="20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="icon-loader" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="40 100"/></symbol>
+</svg>
+
 <!-- Login -->
 <div id="login-screen">
   <div id="login-box">
-    <div id="login-logo"><i class="ti ti-map-pin"></i></div>
+    <div id="login-logo"><svg class="icon"><use href="#icon-map-pin"/></svg></div>
     <h1>日本旅遊地圖</h1>
     <p>記錄你走過的每一處</p>
     <div id="login-error" class="hidden"></div>
@@ -32,7 +55,7 @@
 <!-- Signup -->
 <div id="signup-screen" class="hidden">
   <div id="login-box">
-    <div id="login-logo"><i class="ti ti-map-pin"></i></div>
+    <div id="login-logo"><svg class="icon"><use href="#icon-map-pin"/></svg></div>
     <h1>建立帳號</h1>
     <p>加入日本旅遊地圖</p>
     <div id="signup-error" class="hidden"></div>
@@ -49,25 +72,22 @@
     <div id="sidebar-inner">
 
       <div id="sidebar-header">
-        <div>
-          <h1><i class="ti ti-map-pin"></i>日本旅遊地圖</h1>
-          <p id="user-email-display"></p>
-        </div>
-        <button id="logout-btn" title="登出" onclick="window._auth.logout()"><i class="ti ti-logout"></i></button>
+        <h1><svg class="icon"><use href="#icon-map-pin"/></svg>日本旅遊地圖</h1>
+        <button id="settings-btn" title="設定" onclick="openSettings()"><svg class="icon"><use href="#icon-settings"/></svg></button>
       </div>
 
       <!-- Top Search Bar (Google Maps style) -->
       <div id="search-bar">
         <div id="search-mode-toggle">
-          <button id="smode-place" class="active" onclick="setSearchMode('place')" title="搜尋地點"><i class="ti ti-map-pin"></i></button>
-          <button id="smode-route" onclick="setSearchMode('route')" title="規劃路線"><i class="ti ti-route"></i></button>
+          <button id="smode-place" class="active" onclick="setSearchMode('place')" title="搜尋地點"><svg class="icon"><use href="#icon-map-pin"/></svg></button>
+          <button id="smode-route" onclick="setSearchMode('route')" title="規劃路線"><svg class="icon"><use href="#icon-route"/></svg></button>
         </div>
 
         <!-- Place search -->
         <div id="search-place-row">
           <div style="position:relative;flex:1;">
-            <i class="ti ti-search" id="search-icon"></i>
-            <input type="text" id="top-search" placeholder="搜尋地點..." autocomplete="off">
+            <svg class="icon" id="search-icon"><use href="#icon-search"/></svg>
+            <input type="text" id="top-search" placeholder="搜尋地點（中文／英文／日文皆可）" autocomplete="off">
             <div id="top-search-results" class="hidden search-results-dropdown"></div>
           </div>
         </div>
@@ -85,24 +105,19 @@
             <div id="top-dest-results" class="hidden search-results-dropdown"></div>
           </div>
           <div id="top-route-transport">
-            <button class="rt-mini active" id="rt-drive" onclick="selectTopTransport('drive')" title="開車/公車"><i class="ti ti-car"></i></button>
-            <button class="rt-mini" id="rt-walk" onclick="selectTopTransport('walk')" title="走路"><i class="ti ti-walk"></i></button>
-            <button class="rt-mini" id="rt-train" onclick="selectTopTransport('train')" title="電車"><i class="ti ti-train"></i></button>
+            <button class="rt-mini active" id="rt-drive" onclick="selectTopTransport('drive')" title="開車/公車"><svg class="icon"><use href="#icon-car"/></svg></button>
+            <button class="rt-mini" id="rt-walk" onclick="selectTopTransport('walk')" title="走路"><svg class="icon"><use href="#icon-walk"/></svg></button>
+            <button class="rt-mini" id="rt-train" onclick="selectTopTransport('train')" title="電車"><svg class="icon"><use href="#icon-train"/></svg></button>
             <button id="top-route-go" onclick="topSearchRoute()">規劃</button>
           </div>
         </div>
       </div>
 
-      <div id="settings-bar">
-        <button id="settings-btn" onclick="openSettings()"><i class="ti ti-settings"></i> 設定</button>
-      </div>
-
-
       <div id="toolbar">
-        <button class="tool-btn active" id="btn-view" onclick="setMode('view')"><i class="ti ti-hand-finger"></i>瀏覽</button>
-        <button class="tool-btn" id="btn-pin" onclick="setMode('pin')"><i class="ti ti-map-pin"></i>新增</button>
-        <button class="tool-btn" id="btn-route" onclick="openRouteModal()"><i class="ti ti-route"></i>手動畫路線</button>
-        <button class="tool-btn" id="btn-delete" onclick="setMode('delete')"><i class="ti ti-trash"></i>刪除</button>
+        <button class="tool-btn active" id="btn-view" onclick="setMode('view')"><svg class="icon"><use href="#icon-hand-finger"/></svg>瀏覽</button>
+        <button class="tool-btn" id="btn-pin" onclick="setMode('pin')"><svg class="icon"><use href="#icon-map-pin"/></svg>新增</button>
+        <button class="tool-btn" id="btn-route" onclick="openRouteModal()"><svg class="icon"><use href="#icon-route"/></svg>手動畫線</button>
+        <button class="tool-btn" id="btn-delete" onclick="setMode('delete')"><svg class="icon"><use href="#icon-trash"/></svg>刪除</button>
       </div>
 
       <div id="tab-bar">
@@ -130,22 +145,22 @@
         </div>
       </div>
 
-      <div id="content-list"><div class="list-loading"><i class="ti ti-loader-2 spin"></i> 載入中...</div></div>
+      <div id="content-list"><div class="list-loading"><svg class="icon spin"><use href="#icon-loader"/></svg> 載入中...</div></div>
 
       <div id="stats-bar">
         <div class="stat">地點 <span id="st-places">0</span></div>
         <div class="stat">路線 <span id="st-routes">0</span></div>
       </div>
     </div>
-    <button id="collapse-btn" onclick="toggleSidebar()" aria-label="收合側欄"><i class="ti ti-chevron-left"></i></button>
+    <button id="collapse-btn" onclick="toggleSidebar()" aria-label="收合側欄"><svg class="icon"><use href="#icon-chevron-left"/></svg></button>
   </div>
 
   <div id="map-area">
     <div id="map"></div>
     <div id="map-controls">
-      <button class="map-ctrl-btn" onclick="map.setZoom(map.getZoom()+1)"><i class="ti ti-plus"></i></button>
-      <button class="map-ctrl-btn" onclick="map.setZoom(map.getZoom()-1)"><i class="ti ti-minus"></i></button>
-      <button class="map-ctrl-btn" style="margin-top:4px;" onclick="map.panTo({lat:36.2,lng:138.5});map.setZoom(5);"><i class="ti ti-current-location"></i></button>
+      <button class="map-ctrl-btn" onclick="map.setZoom(map.getZoom()+1)"><svg class="icon"><use href="#icon-plus"/></svg></button>
+      <button class="map-ctrl-btn" onclick="map.setZoom(map.getZoom()-1)"><svg class="icon"><use href="#icon-minus"/></svg></button>
+      <button class="map-ctrl-btn" style="margin-top:4px;" onclick="map.panTo({lat:36.2,lng:138.5});map.setZoom(5);"><svg class="icon"><use href="#icon-current-location"/></svg></button>
     </div>
     <div id="mode-indicator" class="hidden"></div>
     <div id="legend">
@@ -159,13 +174,13 @@
 
 <!-- Info Panel -->
 <div id="info-panel" class="hidden">
-  <button id="info-close" onclick="closeInfoPanel()"><i class="ti ti-x"></i></button>
+  <button id="info-close" onclick="closeInfoPanel()"><svg class="icon"><use href="#icon-x"/></svg></button>
   <h3 id="info-name"></h3>
   <div id="info-meta"></div>
   <div id="info-note" class="note-box"></div>
   <div class="info-actions">
-    <button onclick="editSelectedPlace()"><i class="ti ti-edit"></i> 編輯</button>
-    <button onclick="deleteSelectedPlace()" class="danger"><i class="ti ti-trash"></i> 刪除</button>
+    <button onclick="editSelectedPlace()"><svg class="icon"><use href="#icon-edit"/></svg> 編輯</button>
+    <button onclick="deleteSelectedPlace()" class="danger"><svg class="icon"><use href="#icon-trash"/></svg> 刪除</button>
   </div>
 </div>
 
@@ -225,13 +240,21 @@
 <div id="settings-overlay" class="modal-overlay hidden">
   <div class="modal-box">
     <h3>設定</h3>
+    <div id="settings-user-email"></div>
     <div class="settings-item" onclick="closeSettings();openImport();">
-      <i class="ti ti-upload"></i>
+      <svg class="icon settings-item-icon"><use href="#icon-upload"/></svg>
       <div>
         <div class="settings-item-title">匯入 Google 時間軸</div>
         <div class="settings-item-desc">從 Google 時間軸記錄匯入地點與路線</div>
       </div>
-      <i class="ti ti-chevron-right settings-arrow"></i>
+      <svg class="icon settings-arrow"><use href="#icon-chevron-right"/></svg>
+    </div>
+    <div class="settings-item" onclick="window._auth.logout()">
+      <svg class="icon settings-item-icon" style="color:#C0392B;"><use href="#icon-logout"/></svg>
+      <div>
+        <div class="settings-item-title" style="color:#C0392B;">登出</div>
+        <div class="settings-item-desc">登出目前帳號</div>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()" style="width:100%;">關閉</button>
@@ -248,7 +271,7 @@
       ondragover="event.preventDefault();this.classList.add('dragover')"
       ondragleave="this.classList.remove('dragover')"
       ondrop="handleDrop(event)">
-      <i class="ti ti-file-upload"></i>
+      <svg class="icon" style="width:28px;height:28px;color:#bbb;"><use href="#icon-file-upload"/></svg>
       <p>點擊或拖曳 JSON 檔案至此</p>
       <span>支援 Records.json 或 Semantic Location History</span>
     </div>

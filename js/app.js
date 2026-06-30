@@ -107,7 +107,7 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('signup-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-    document.getElementById('user-email-display').textContent = user.email || user.displayName || '';
+    document.getElementById('settings-user-email').textContent = user.email || user.displayName || '';
     initMapWhenReady();
     subscribeData();
   } else {
@@ -204,38 +204,52 @@ function setupAutocompleteInput(inputId, resultsId, onPlaceSelected, textOnly) {
     const val = input.value.trim();
     if (!val) { results.classList.add('hidden'); return; }
     t = setTimeout(() => {
-      autocompleteService.getPlacePredictions(
-        { input: val, componentRestrictions: { country: 'jp' }, language: 'zh-TW' },
-        (predictions, status) => {
-          if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
-            results.classList.add('hidden'); return;
+      // No country/type restriction on the query itself — this lets Chinese, English,
+      // or Japanese keywords all match (e.g. "精靈寶可夢中心", "pokemon center", "ポケモンセンター").
+      // We bias toward Japan via location bias instead of hard-restricting country,
+      // since componentRestrictions can sometimes suppress valid brand-name matches.
+      const request = {
+        input: val,
+        language: 'zh-TW',
+        locationBias: { radius: 1500000, center: { lat: 36.2, lng: 138.5 } }, // covers all of Japan
+      };
+      autocompleteService.getPlacePredictions(request, (predictions, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions || predictions.length === 0) {
+          if (status !== google.maps.places.PlacesServiceStatus.OK && status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+            console.warn('Places Autocomplete error:', status);
           }
-          results.innerHTML = predictions.slice(0, 6).map((p, i) =>
-            `<div class="search-result-item" data-idx="${i}">
-              <div class="sr-name">${esc(p.structured_formatting.main_text)}</div>
-              <div class="sr-addr">${esc(p.structured_formatting.secondary_text || '')}</div>
-            </div>`
-          ).join('');
+          results.innerHTML = '<div class="search-result-empty">找不到符合的地點</div>';
           results.classList.remove('hidden');
-          results.querySelectorAll('.search-result-item').forEach((el, i) => {
-            el.onclick = () => {
-              const pred = predictions[i];
-              if (textOnly) {
-                input.value = pred.description;
-                results.classList.add('hidden');
-              } else if (onPlaceSelected) {
-                placesService.getDetails(
-                  { placeId: pred.place_id, fields: ['name', 'geometry', 'address_components', 'formatted_address'] },
-                  (place, st) => {
-                    if (st !== google.maps.places.PlacesServiceStatus.OK) return;
-                    onPlaceSelected(place);
-                  }
-                );
-              }
-            };
-          });
+          return;
         }
-      );
+        results.innerHTML = predictions.slice(0, 6).map((p, i) =>
+          `<div class="search-result-item" data-idx="${i}">
+            <div class="sr-name">${esc(p.structured_formatting.main_text)}</div>
+            <div class="sr-addr">${esc(p.structured_formatting.secondary_text || '')}</div>
+          </div>`
+        ).join('');
+        results.classList.remove('hidden');
+        results.querySelectorAll('.search-result-item').forEach((el, i) => {
+          el.onclick = () => {
+            const pred = predictions[i];
+            if (textOnly) {
+              input.value = pred.description;
+              results.classList.add('hidden');
+            } else if (onPlaceSelected) {
+              placesService.getDetails(
+                { placeId: pred.place_id, fields: ['name', 'geometry', 'address_components', 'formatted_address'] },
+                (place, st) => {
+                  if (st !== google.maps.places.PlacesServiceStatus.OK) {
+                    console.warn('Place Details error:', st);
+                    return;
+                  }
+                  onPlaceSelected(place);
+                }
+              );
+            }
+          };
+        });
+      });
     }, 280);
   });
   document.addEventListener('click', (e) => {
