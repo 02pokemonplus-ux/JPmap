@@ -21,9 +21,9 @@ const googleProvider = new GoogleAuthProvider();
 
 // ── Constants ──
 const TRANSPORT = {
-  drive: { label: '開車 / 公車', color: '#378ADD', dash: [8, 4], gmMode: 'DRIVING' },
-  walk:  { label: '走路',        color: '#EF9F27', dash: [4, 4], gmMode: 'WALKING' },
-  train: { label: '電車',        color: '#D85A30', dash: [12, 3], gmMode: 'TRANSIT' },
+  drive: { label: '開車 / 公車', color: '#378ADD', dash: [8, 4] },
+  walk:  { label: '走路',        color: '#EF9F27', dash: [4, 4] },
+  train: { label: '電車',        color: '#D85A30', dash: [12, 3] },
 };
 const TAG_STYLE = {
   '美食': { bg: '#FAEEDA', text: '#633806' },
@@ -32,7 +32,13 @@ const TAG_STYLE = {
   '文化': { bg: '#EEEDFE', text: '#3C3489' },
   '購物': { bg: '#FAECE7', text: '#712B13' },
   '住宿': { bg: '#E8F0FE', text: '#1A3A7A' },
+  '交通': { bg: '#FCE8E6', text: '#8C2D1E' },
 };
+// Marker base scale at zoom 14; scales down/up with zoom level
+const MARKER_BASE_ZOOM = 14;
+const MARKER_BASE_SCALE = 8;
+const MARKER_MIN_SCALE = 3;
+const MARKER_MAX_SCALE = 11;
 
 // ── State ──
 let map, directionsService, directionsRenderer, autocompleteService, placesService;
@@ -43,12 +49,12 @@ let mode = 'view', activeTab = 'places', currentFilter = '全部';
 let selectedPlaceId = null, selectedRouteId = null;
 let editingPlaceId = null, pendingLatLng = null;
 let drawingRoute = null, drawPolyline = null, drawPath = [];
-let pendingTransport = 'drive';
+let pendingTransport = 'drive';   // for manual draw modal
+let topTransport = 'drive';       // for top search bar route mode
 let pendingImport = null;
 let sidebarOpen = true;
-let routeTabMode = 'auto';
 let deleteSelected = new Set();
-let searchTimeout = null;
+let searchMode = 'place'; // 'place' | 'route'
 
 // ── Auth ──
 window._auth = {
@@ -135,10 +141,7 @@ function initGoogleMap() {
   });
 
   directionsService = new google.maps.DirectionsService();
-  directionsRenderer = new google.maps.DirectionsRenderer({
-    suppressMarkers: true,
-    preserveViewport: true,
-  });
+  directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true, preserveViewport: true });
   autocompleteService = new google.maps.places.AutocompleteService();
   placesService = new google.maps.places.PlacesService(map);
 
@@ -152,70 +155,46 @@ function initGoogleMap() {
     }
   });
 
-  map.addListener('dblclick', (e) => {
+  map.addListener('dblclick', () => {
     if (mode === 'draw' && drawingRoute) finishDrawing();
   });
 
-  setupPlaceSearch();
-  setupRouteSearch();
+  // Rescale markers as zoom changes
+  map.addListener('zoom_changed', () => { syncPlaceMarkers(); });
+
+  setupTopSearch();
 }
 
-// ── Place Search in Add Modal ──
-function setupPlaceSearch() {
-  const input = document.getElementById('f-search');
-  const results = document.getElementById('search-results');
-  if (!input) return;
-
-  input.addEventListener('input', () => {
-    clearTimeout(searchTimeout);
-    const val = input.value.trim();
-    if (!val) { results.classList.add('hidden'); return; }
-    searchTimeout = setTimeout(() => {
-      autocompleteService.getPlacePredictions(
-        { input: val, componentRestrictions: { country: 'jp' }, language: 'zh-TW' },
-        (predictions, status) => {
-          if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
-            results.classList.add('hidden'); return;
-          }
-          results.innerHTML = predictions.slice(0, 5).map(p =>
-            `<div class="search-result-item" onclick="selectSearchPlace('${p.place_id}','${esc(p.structured_formatting.main_text)}')">
-              <div class="sr-name">${esc(p.structured_formatting.main_text)}</div>
-              <div class="sr-addr">${esc(p.structured_formatting.secondary_text || '')}</div>
-            </div>`
-          ).join('');
-          results.classList.remove('hidden');
-        }
-      );
-    }, 300);
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!input.contains(e.target) && !results.contains(e.target)) results.classList.add('hidden');
-  });
+function markerScaleForZoom() {
+  const zoom = map.getZoom() || MARKER_BASE_ZOOM;
+  const diff = zoom - MARKER_BASE_ZOOM;
+  const scale = MARKER_BASE_SCALE + diff * 1.1;
+  return Math.max(MARKER_MIN_SCALE, Math.min(MARKER_MAX_SCALE, scale));
 }
 
-window.selectSearchPlace = function(placeId, name) {
-  document.getElementById('f-search').value = name;
-  document.getElementById('search-results').classList.add('hidden');
-  placesService.getDetails({ placeId, fields: ['name', 'geometry', 'address_components', 'formatted_address'] }, (place, status) => {
-    if (status !== google.maps.places.PlacesServiceStatus.OK) return;
-    document.getElementById('f-name').value = place.name || name;
-    // Extract city from address components
-    const cityComp = place.address_components?.find(c => c.types.includes('locality') || c.types.includes('administrative_area_level_1'));
-    if (cityComp) document.getElementById('f-city').value = cityComp.long_name;
+// ══════════════════════════════════════
+// TOP SEARCH BAR (Google Maps style)
+// ══════════════════════════════════════
+function setupTopSearch() {
+  setupAutocompleteInput('top-search', 'top-search-results', (place) => {
+    // Place mode: selecting a result immediately opens add-place flow with prefilled data
     pendingLatLng = place.geometry.location;
+    editingPlaceId = null;
     map.panTo(pendingLatLng);
-    map.setZoom(15);
+    map.setZoom(16);
+    openAddModal(place.name);
+    document.getElementById('top-search').value = '';
+    document.getElementById('top-search-results').classList.add('hidden');
   });
-};
 
-// ── Route Search (Directions API) ──
-function setupRouteSearch() {
-  setupRouteAutocomplete('r-origin', 'origin-results');
-  setupRouteAutocomplete('r-dest', 'dest-results');
+  setupAutocompleteInput('top-r-origin', 'top-origin-results', null, true);
+  setupAutocompleteInput('top-r-dest', 'top-dest-results', null, true);
 }
 
-function setupRouteAutocomplete(inputId, resultsId) {
+// Generic autocomplete wiring.
+// onPlaceSelected(place): if provided, fetches full place details on selection (place search mode)
+// textOnly: if true, just fills the input text value (route origin/destination mode)
+function setupAutocompleteInput(inputId, resultsId, onPlaceSelected, textOnly) {
   const input = document.getElementById(inputId);
   const results = document.getElementById(resultsId);
   if (!input || !results) return;
@@ -231,28 +210,63 @@ function setupRouteAutocomplete(inputId, resultsId) {
           if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
             results.classList.add('hidden'); return;
           }
-          results.innerHTML = predictions.slice(0, 5).map(p =>
-            `<div class="search-result-item" onclick="fillRouteInput('${inputId}','${resultsId}','${esc(p.description)}')">
+          results.innerHTML = predictions.slice(0, 6).map((p, i) =>
+            `<div class="search-result-item" data-idx="${i}">
               <div class="sr-name">${esc(p.structured_formatting.main_text)}</div>
               <div class="sr-addr">${esc(p.structured_formatting.secondary_text || '')}</div>
             </div>`
           ).join('');
           results.classList.remove('hidden');
+          results.querySelectorAll('.search-result-item').forEach((el, i) => {
+            el.onclick = () => {
+              const pred = predictions[i];
+              if (textOnly) {
+                input.value = pred.description;
+                results.classList.add('hidden');
+              } else if (onPlaceSelected) {
+                placesService.getDetails(
+                  { placeId: pred.place_id, fields: ['name', 'geometry', 'address_components', 'formatted_address'] },
+                  (place, st) => {
+                    if (st !== google.maps.places.PlacesServiceStatus.OK) return;
+                    onPlaceSelected(place);
+                  }
+                );
+              }
+            };
+          });
         }
       );
-    }, 300);
+    }, 280);
   });
   document.addEventListener('click', (e) => {
     if (!input.contains(e.target) && !results.contains(e.target)) results.classList.add('hidden');
   });
 }
 
-window.fillRouteInput = function(inputId, resultsId, value) {
-  document.getElementById(inputId).value = value;
-  document.getElementById(resultsId).classList.add('hidden');
+window.setSearchMode = function(m) {
+  searchMode = m;
+  document.getElementById('smode-place').classList.toggle('active', m === 'place');
+  document.getElementById('smode-route').classList.toggle('active', m === 'route');
+  document.getElementById('search-place-row').classList.toggle('hidden', m !== 'place');
+  document.getElementById('search-route-row').classList.toggle('hidden', m !== 'route');
 };
 
-// ── Firestore ──
+window.selectTopTransport = function(t) {
+  topTransport = t;
+  ['drive', 'walk', 'train'].forEach(x => document.getElementById('rt-' + x).classList.toggle('active', x === t));
+};
+
+window.topSearchRoute = function() {
+  const origin = document.getElementById('top-r-origin').value.trim();
+  const dest   = document.getElementById('top-r-dest').value.trim();
+  if (!origin || !dest) { alert('請輸入起點和終點'); return; }
+  const name = `${origin} → ${dest}`;
+  searchAndSaveRoute(origin, dest, name, topTransport, 'top-route-go');
+};
+
+// ══════════════════════════════════════
+// Firestore
+// ══════════════════════════════════════
 function subscribeData() {
   const uid = currentUser.uid;
   const pq = query(collection(db, 'places'), where('uid', '==', uid));
@@ -275,10 +289,13 @@ async function deletePlace(id) { await deleteDoc(doc(db, 'places', id)); }
 async function addRoute(data) { await addDoc(collection(db, 'routes'), { ...data, uid: currentUser.uid, createdAt: Date.now() }); }
 async function deleteRoute(id) { await deleteDoc(doc(db, 'routes', id)); }
 
-// ── Markers ──
+// ══════════════════════════════════════
+// Markers & Polylines
+// ══════════════════════════════════════
 function syncPlaceMarkers() {
   const ids = new Set(places.map(p => p.id));
   Object.keys(markers).forEach(id => { if (!ids.has(id)) { markers[id].setMap(null); delete markers[id]; } });
+  const scale = markerScaleForZoom();
   places.forEach(p => {
     const s = TAG_STYLE[p.tag] || { bg: '#E6F1FB', text: '#185FA5' };
     const sel = selectedPlaceId === p.id;
@@ -286,7 +303,7 @@ function syncPlaceMarkers() {
       path: google.maps.SymbolPath.CIRCLE,
       fillColor: s.bg, fillOpacity: 1,
       strokeColor: s.text, strokeWeight: sel ? 2.5 : 1.5,
-      scale: sel ? 11 : 8,
+      scale: sel ? scale * 1.3 : scale,
     };
     if (markers[p.id]) { markers[p.id].setIcon(icon); return; }
     const marker = new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, title: p.name, icon });
@@ -322,7 +339,9 @@ function clearMap() {
   markers = {}; polylines = {}; places = []; routes = [];
 }
 
-// ── Selection ──
+// ══════════════════════════════════════
+// Selection
+// ══════════════════════════════════════
 function selectPlace(id) {
   if (mode === 'delete') { toggleDeleteItem('place', id); return; }
   selectedPlaceId = id; selectedRouteId = null;
@@ -331,7 +350,7 @@ function selectPlace(id) {
   const s = TAG_STYLE[p.tag] || {};
   document.getElementById('info-name').textContent = p.name;
   document.getElementById('info-meta').innerHTML =
-    `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:${s.bg};color:${s.text};margin-right:6px;">${p.tag}</span>${p.city || ''}${p.city && p.date ? ' · ' : ''}${p.date || ''}`;
+    `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:${s.bg};color:${s.text};margin-right:6px;">${p.tag}</span>${p.date || ''}`;
   document.getElementById('info-note').textContent = p.note || '（尚無筆記）';
   document.getElementById('info-panel').classList.remove('hidden');
   syncPlaceMarkers(); renderList();
@@ -356,9 +375,7 @@ window.editSelectedPlace = function() {
   if (!p) return;
   editingPlaceId = p.id;
   document.getElementById('modal-title').textContent = '編輯地點';
-  document.getElementById('f-search').value = '';
   document.getElementById('f-name').value = p.name;
-  document.getElementById('f-city').value = p.city || '';
   document.getElementById('f-tag').value = p.tag || '美食';
   document.getElementById('f-date').value = p.date || '';
   document.getElementById('f-note').value = p.note || '';
@@ -373,7 +390,9 @@ window.deleteSelectedPlace = async function() {
   document.getElementById('info-panel').classList.add('hidden');
 };
 
-// ── Delete Mode ──
+// ══════════════════════════════════════
+// Delete Mode
+// ══════════════════════════════════════
 function toggleDeleteItem(type, id) {
   const key = `${type}:${id}`;
   if (deleteSelected.has(key)) deleteSelected.delete(key);
@@ -399,7 +418,9 @@ window.confirmDelete = async function() {
   setMode('view');
 };
 
-// ── Mode ──
+// ══════════════════════════════════════
+// Mode
+// ══════════════════════════════════════
 window.setMode = function(m) {
   mode = m;
   deleteSelected.clear();
@@ -422,13 +443,14 @@ window.setMode = function(m) {
   renderList();
 };
 
-// ── Sidebar ──
+// ══════════════════════════════════════
+// Sidebar / Tabs / Filter
+// ══════════════════════════════════════
 window.toggleSidebar = function() {
   sidebarOpen = !sidebarOpen;
   document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen);
 };
 
-// ── Tabs & Filter ──
 window.switchTab = function(tab) {
   activeTab = tab;
   document.getElementById('tab-places').classList.toggle('active', tab === 'places');
@@ -444,13 +466,15 @@ window.filterTag = function(el, tag) {
   renderList();
 };
 
-// ── Render List ──
+// ══════════════════════════════════════
+// Render List
+// ══════════════════════════════════════
 function renderList() {
   const list = document.getElementById('content-list');
   if (activeTab === 'places') {
     const f = currentFilter === '全部' ? places : places.filter(p => p.tag === currentFilter);
     if (f.length === 0) {
-      list.innerHTML = '<div class="list-empty">尚無地點記錄<br>點「新增」後點擊地圖標記</div>';
+      list.innerHTML = '<div class="list-empty">尚無地點記錄<br>用上方搜尋列或「新增」按鈕加入地點</div>';
     } else {
       list.innerHTML = f.map(p => {
         const s = TAG_STYLE[p.tag] || {};
@@ -461,7 +485,7 @@ function renderList() {
           <div class="place-icon" style="background:${s.bg};"><i class="ti ti-map-pin" style="font-size:13px;color:${s.text};"></i></div>
           <div class="place-info">
             <div class="place-name">${esc(p.name)}</div>
-            <div class="place-meta">${esc(p.city || '')}${p.city && p.date ? ' · ' : ''}${p.date || ''}</div>
+            <div class="place-meta">${p.date || ''}</div>
             <span class="place-tag" style="background:${s.bg};color:${s.text};">${p.tag}</span>
           </div>
         </div>`;
@@ -469,7 +493,7 @@ function renderList() {
     }
   } else {
     if (routes.length === 0) {
-      list.innerHTML = '<div class="list-empty">尚無路線記錄<br>點「路線」開始新增</div>';
+      list.innerHTML = '<div class="list-empty">尚無路線記錄<br>用上方搜尋列規劃路線，或手動畫路線</div>';
     } else {
       list.innerHTML = routes.map(r => {
         const t = TRANSPORT[r.transport] || TRANSPORT.drive;
@@ -493,18 +517,19 @@ function renderList() {
 function renderStats() {
   document.getElementById('st-places').textContent = places.length;
   document.getElementById('st-routes').textContent = routes.length;
-  document.getElementById('st-cities').textContent = new Set(places.map(p => p.city).filter(Boolean)).size;
 }
 
-// ── Add/Edit Place ──
-function openAddModal() {
+// ══════════════════════════════════════
+// Add / Edit Place
+// ══════════════════════════════════════
+function openAddModal(prefillName) {
   document.getElementById('modal-title').textContent = '新增地點';
-  document.getElementById('f-search').value = '';
-  document.getElementById('search-results').classList.add('hidden');
-  ['f-name', 'f-city', 'f-note'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-name').value = prefillName || '';
+  document.getElementById('f-note').value = '';
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('f-tag').value = '美食';
   document.getElementById('add-modal').classList.remove('hidden');
+  if (!prefillName) setTimeout(() => document.getElementById('f-name').focus(), 50);
 }
 
 window.savePlace = async function() {
@@ -512,7 +537,6 @@ window.savePlace = async function() {
   if (!name) { document.getElementById('f-name').focus(); return; }
   const data = {
     name,
-    city:  document.getElementById('f-city').value.trim(),
     tag:   document.getElementById('f-tag').value,
     date:  document.getElementById('f-date').value,
     note:  document.getElementById('f-note').value.trim(),
@@ -522,8 +546,8 @@ window.savePlace = async function() {
     selectedPlaceId = editingPlaceId;
     editingPlaceId = null;
   } else if (pendingLatLng) {
-    data.lat = pendingLatLng.lat();
-    data.lng = pendingLatLng.lng();
+    data.lat = typeof pendingLatLng.lat === 'function' ? pendingLatLng.lat() : pendingLatLng.lat;
+    data.lng = typeof pendingLatLng.lng === 'function' ? pendingLatLng.lng() : pendingLatLng.lng;
     await addPlace(data);
     pendingLatLng = null;
   }
@@ -535,27 +559,21 @@ window.closeModal = function() {
   pendingLatLng = null; editingPlaceId = null;
 };
 
-// ── Route Modal ──
+// ══════════════════════════════════════
+// Settings Modal
+// ══════════════════════════════════════
+window.openSettings = function() { document.getElementById('settings-overlay').classList.remove('hidden'); };
+window.closeSettings = function() { document.getElementById('settings-overlay').classList.add('hidden'); };
+
+// ══════════════════════════════════════
+// Manual Route Drawing Modal
+// ══════════════════════════════════════
 window.openRouteModal = function() {
   pendingTransport = 'drive';
   document.querySelectorAll('.transport-option').forEach(el => el.classList.remove('selected'));
   document.getElementById('t-drive').classList.add('selected');
   document.getElementById('r-name').value = '';
-  document.getElementById('r-origin').value = '';
-  document.getElementById('r-dest').value = '';
-  switchRouteTab('auto');
   document.getElementById('route-modal').classList.remove('hidden');
-};
-
-window.switchRouteTab = function(tab) {
-  routeTabMode = tab;
-  document.getElementById('rtab-auto').style.background = tab === 'auto' ? '#185FA5' : '#fff';
-  document.getElementById('rtab-auto').style.color = tab === 'auto' ? '#fff' : '#555';
-  document.getElementById('rtab-manual').style.background = tab === 'manual' ? '#185FA5' : '#fff';
-  document.getElementById('rtab-manual').style.color = tab === 'manual' ? '#fff' : '#555';
-  document.getElementById('route-auto-section').classList.toggle('hidden', tab !== 'auto');
-  document.getElementById('route-manual-section').classList.toggle('hidden', tab !== 'manual');
-  document.getElementById('route-action-btn').textContent = tab === 'auto' ? '搜尋路線' : '開始畫路線';
 };
 
 window.selectTransport = function(t) {
@@ -564,65 +582,8 @@ window.selectTransport = function(t) {
   document.getElementById('t-' + t).classList.add('selected');
 };
 
-window.closeRouteModal = function() {
-  document.getElementById('route-modal').classList.add('hidden');
-};
+window.closeRouteModal = function() { document.getElementById('route-modal').classList.add('hidden'); };
 
-window.handleRouteAction = function() {
-  if (routeTabMode === 'auto') searchAutoRoute();
-  else startDrawing();
-};
-
-// Auto route via Directions API
-function searchAutoRoute() {
-  const origin = document.getElementById('r-origin').value.trim();
-  const dest   = document.getElementById('r-dest').value.trim();
-  const name   = document.getElementById('r-name').value.trim() || `${origin} → ${dest}`;
-  if (!origin || !dest) { alert('請輸入起點和終點'); return; }
-
-  const t = TRANSPORT[pendingTransport];
-  const travelMode = {
-    drive: google.maps.TravelMode.DRIVING,
-    walk:  google.maps.TravelMode.WALKING,
-    train: google.maps.TravelMode.TRANSIT,
-  }[pendingTransport];
-
-  directionsService.route({
-    origin, destination: dest, travelMode,
-    region: 'jp',
-  }, async (result, status) => {
-    if (status !== google.maps.DirectionsStatus.OK) {
-      alert('找不到路線，請確認起點和終點是否正確'); return;
-    }
-
-    // Extract points from route
-    const leg = result.routes[0].legs[0];
-    const points = [];
-    leg.steps.forEach(step => {
-      step.path.forEach(latlng => {
-        points.push({ lat: latlng.lat(), lng: latlng.lng() });
-      });
-    });
-
-    // Sample every N points to avoid hitting Firestore limits
-    const maxPts = 200;
-    const step = Math.max(1, Math.floor(points.length / maxPts));
-    const sampled = points.filter((_, i) => i % step === 0);
-    if (sampled[sampled.length - 1] !== points[points.length - 1]) sampled.push(points[points.length - 1]);
-
-    await addRoute({ name, transport: pendingTransport, points: sampled });
-    closeRouteModal();
-    if (activeTab !== 'routes') switchTab('routes');
-
-    // Show route briefly on map
-    directionsRenderer.setMap(map);
-    directionsRenderer.setDirections(result);
-    directionsRenderer.setOptions({ polylineOptions: { strokeColor: t.color, strokeWeight: 4 } });
-    setTimeout(() => directionsRenderer.setMap(null), 3000);
-  });
-}
-
-// Manual drawing
 function startDrawing() {
   const name = document.getElementById('r-name').value.trim() || '未命名路線';
   drawingRoute = { name, transport: pendingTransport };
@@ -653,7 +614,87 @@ async function finishDrawing() {
   if (activeTab !== 'routes') switchTab('routes');
 }
 
-// ── Import ──
+// ══════════════════════════════════════
+// Auto Route (Directions API) — used by top search bar
+// ══════════════════════════════════════
+function searchAndSaveRoute(origin, dest, name, transport, triggerBtnId) {
+  const travelMode = {
+    drive: google.maps.TravelMode.DRIVING,
+    walk:  google.maps.TravelMode.WALKING,
+    train: google.maps.TravelMode.TRANSIT,
+  }[transport];
+
+  const request = { origin, destination: dest, travelMode, region: 'jp' };
+  if (transport === 'train') request.transitOptions = { departureTime: new Date() };
+
+  const btn = triggerBtnId ? document.getElementById(triggerBtnId) : null;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '搜尋中...'; btn.disabled = true; }
+
+  directionsService.route(request, async (result, status) => {
+    if (btn) { btn.textContent = origText; btn.disabled = false; }
+
+    if (status !== google.maps.DirectionsStatus.OK) {
+      if (transport === 'train') {
+        const retry = confirm('找不到電車路線（部分地區大眾運輸資料不完整）。\n要改用開車路線替代嗎？');
+        if (retry) {
+          directionsService.route(
+            { origin, destination: dest, travelMode: google.maps.TravelMode.DRIVING, region: 'jp' },
+            async (result2, status2) => {
+              if (status2 !== google.maps.DirectionsStatus.OK) {
+                alert('找不到路線，請確認起點和終點名稱是否正確。'); return;
+              }
+              await saveRouteFromResult(result2, name, 'drive');
+              clearTopRouteInputs();
+            }
+          );
+        }
+      } else {
+        alert('找不到路線，請確認起點和終點名稱是否正確。\n\n建議：輸入完整車站名，例如「大船駅」、「渋谷駅」');
+      }
+      return;
+    }
+    await saveRouteFromResult(result, name, transport);
+    clearTopRouteInputs();
+  });
+}
+
+function clearTopRouteInputs() {
+  document.getElementById('top-r-origin').value = '';
+  document.getElementById('top-r-dest').value = '';
+}
+
+async function saveRouteFromResult(result, name, transport) {
+  const t = TRANSPORT[transport];
+  const leg = result.routes[0].legs[0];
+  const points = [];
+  leg.steps.forEach(step => {
+    if (step.steps) {
+      step.steps.forEach(sub => sub.path.forEach(ll => points.push({ lat: ll.lat(), lng: ll.lng() })));
+    } else {
+      step.path.forEach(ll => points.push({ lat: ll.lat(), lng: ll.lng() }));
+    }
+  });
+
+  const maxPts = 200;
+  const interval = Math.max(1, Math.floor(points.length / maxPts));
+  const sampled = points.filter((_, i) => i % interval === 0);
+  if (points.length > 0 && sampled[sampled.length - 1] !== points[points.length - 1]) {
+    sampled.push(points[points.length - 1]);
+  }
+
+  await addRoute({ name, transport, points: sampled });
+  if (activeTab !== 'routes') switchTab('routes');
+
+  directionsRenderer.setMap(map);
+  directionsRenderer.setDirections(result);
+  directionsRenderer.setOptions({ polylineOptions: { strokeColor: t.color, strokeWeight: 4, strokeOpacity: 0.6 } });
+  setTimeout(() => directionsRenderer.setMap(null), 4000);
+}
+
+// ══════════════════════════════════════
+// Import (Google Timeline)
+// ══════════════════════════════════════
 window.openImport = function() {
   document.getElementById('import-overlay').classList.remove('hidden');
   document.getElementById('import-result').classList.add('hidden');
@@ -716,7 +757,6 @@ function parseGoogleTimeline(data) {
         if (loc.latitudeE7 && loc.longitudeE7) {
           out.places.push({
             name: loc.name || '未命名地點',
-            city: loc.address ? loc.address.split(',').slice(-3, -1).join('').trim() : '',
             tag: '文化', date: pv.duration?.startTimestamp?.slice(0, 10) || '',
             note: '從 Google 時間軸匯入',
             lat: loc.latitudeE7 / 1e7, lng: loc.longitudeE7 / 1e7,
