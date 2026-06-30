@@ -208,8 +208,7 @@ function initGoogleMap() {
 
   directionsService = new google.maps.DirectionsService();
   directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true, preserveViewport: true });
-  autocompleteService = new google.maps.places.AutocompleteService();
-  placesService = new google.maps.places.PlacesService(map);
+  // New Places API classes are loaded lazily via importLibrary in the search/POI functions.
 
   map.addListener('click', (e) => {
     // If a built-in POI was clicked, e.placeId is set — show our own info card instead of Google's
@@ -242,36 +241,37 @@ function initGoogleMap() {
   setupTopSearch();
 }
 
-// Handle clicking a built-in Google POI icon: fetch details, show info card with "新增至地圖"
-function handlePoiClick(placeId, latLng, addImmediately) {
-  placesService.getDetails(
-    { placeId, fields: ['name', 'geometry', 'formatted_address', 'rating', 'user_ratings_total'] },
-    (place, status) => {
-      if (status !== google.maps.places.PlacesServiceStatus.OK || !place) return;
-      const loc = place.geometry?.location || latLng;
-      if (addImmediately) {
-        pendingLatLng = loc;
-        editingPlaceId = null;
-        openAddModal(place.name);
-        return;
-      }
-      showPoiCard(place, loc);
+// Handle clicking a built-in Google POI icon: fetch details (new Places API), show info card
+async function handlePoiClick(placeId, latLng, addImmediately) {
+  try {
+    const { Place } = await google.maps.importLibrary('places');
+    const place = new Place({ id: placeId });
+    await place.fetchFields({ fields: ['displayName', 'location', 'formattedAddress', 'rating', 'userRatingCount'] });
+    const loc = place.location || latLng;
+    if (addImmediately) {
+      pendingLatLng = loc;
+      editingPlaceId = null;
+      openAddModal(place.displayName || '');
+      return;
     }
-  );
+    showPoiCard(place, loc);
+  } catch (err) {
+    console.warn('POI details error:', err);
+  }
 }
 
 let poiCardData = null;
 function showPoiCard(place, loc) {
-  poiCardData = { name: place.name, loc };
-  document.getElementById('poi-card-name').textContent = place.name || '未命名地點';
-  const addr = place.formatted_address || '';
+  const name = place.displayName || '未命名地點';
+  poiCardData = { name, loc };
+  document.getElementById('poi-card-name').textContent = name;
+  const addr = place.formattedAddress || '';
   let metaHtml = addr ? `<div class="poi-card-addr">${esc(addr)}</div>` : '';
   if (place.rating) {
-    metaHtml += `<div class="poi-card-rating">★ ${place.rating} <span style="color:#aaa;">(${place.user_ratings_total || 0})</span></div>`;
+    metaHtml += `<div class="poi-card-rating">★ ${place.rating} <span style="color:#aaa;">(${place.userRatingCount || 0})</span></div>`;
   }
   document.getElementById('poi-card-meta').innerHTML = metaHtml;
-  const card = document.getElementById('poi-card');
-  card.classList.remove('hidden');
+  document.getElementById('poi-card').classList.remove('hidden');
   map.panTo(loc);
 }
 
@@ -299,13 +299,15 @@ function markerScaleForZoom() {
 // TOP SEARCH BAR (Google Maps style)
 // ══════════════════════════════════════
 function setupTopSearch() {
-  setupAutocompleteInput('top-search', 'top-search-results', (place) => {
-    // Place mode: selecting a result immediately opens add-place flow with prefilled data
-    pendingLatLng = place.geometry.location;
+  setupAutocompleteInput('top-search', 'top-search-results', async (prediction) => {
+    // Place mode: selecting a result fetches details then opens add-place flow
+    const place = prediction.toPlace();
+    await place.fetchFields({ fields: ['displayName', 'location', 'formattedAddress'] });
+    pendingLatLng = place.location;
     editingPlaceId = null;
     map.panTo(pendingLatLng);
     map.setZoom(16);
-    openAddModal(place.name);
+    openAddModal(place.displayName || '');
     document.getElementById('top-search').value = '';
     document.getElementById('top-search-results').classList.add('hidden');
   });
@@ -314,10 +316,10 @@ function setupTopSearch() {
   setupAutocompleteInput('top-r-dest', 'top-dest-results', null, true);
 }
 
-// Generic autocomplete wiring.
-// onPlaceSelected(place): if provided, fetches full place details on selection (place search mode)
+// Generic autocomplete wiring using the NEW Places API (AutocompleteSuggestion).
+// onPredictionSelected(prediction): called with a PlacePrediction (place search mode)
 // textOnly: if true, just fills the input text value (route origin/destination mode)
-function setupAutocompleteInput(inputId, resultsId, onPlaceSelected, textOnly) {
+function setupAutocompleteInput(inputId, resultsId, onPredictionSelected, textOnly) {
   const input = document.getElementById(inputId);
   const results = document.getElementById(resultsId);
   if (!input || !results) return;
@@ -326,58 +328,60 @@ function setupAutocompleteInput(inputId, resultsId, onPlaceSelected, textOnly) {
     clearTimeout(t);
     const val = input.value.trim();
     if (!val) { results.classList.add('hidden'); return; }
-    t = setTimeout(() => {
-      // Bias toward Japan using country restriction (locationBias circle max is 50km,
-      // far too small to cover all of Japan, so componentRestrictions is the correct tool here).
-      // This still matches Chinese, English, or Japanese keywords (e.g. "精靈寶可夢中心",
-      // "pokemon center", "ポケモンセンター") as long as a matching place exists in Japan.
-      const request = {
-        input: val,
-        language: 'zh-TW',
-        componentRestrictions: { country: 'jp' },
-      };
-      autocompleteService.getPlacePredictions(request, (predictions, status) => {
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions || predictions.length === 0) {
-          if (status !== google.maps.places.PlacesServiceStatus.OK && status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-            console.warn('Places Autocomplete error:', status);
-          }
-          results.innerHTML = '<div class="search-result-empty">找不到符合的地點</div>';
-          results.classList.remove('hidden');
-          return;
-        }
-        results.innerHTML = predictions.slice(0, 6).map((p, i) =>
-          `<div class="search-result-item" data-idx="${i}">
-            <div class="sr-name">${esc(p.structured_formatting.main_text)}</div>
-            <div class="sr-addr">${esc(p.structured_formatting.secondary_text || '')}</div>
-          </div>`
-        ).join('');
-        results.classList.remove('hidden');
-        results.querySelectorAll('.search-result-item').forEach((el, i) => {
-          el.onclick = () => {
-            const pred = predictions[i];
-            if (textOnly) {
-              input.value = pred.description;
-              results.classList.add('hidden');
-            } else if (onPlaceSelected) {
-              placesService.getDetails(
-                { placeId: pred.place_id, fields: ['name', 'geometry', 'address_components', 'formatted_address'] },
-                (place, st) => {
-                  if (st !== google.maps.places.PlacesServiceStatus.OK) {
-                    console.warn('Place Details error:', st);
-                    return;
-                  }
-                  onPlaceSelected(place);
-                }
-              );
-            }
-          };
-        });
-      });
-    }, 280);
+    t = setTimeout(() => fetchSuggestions(val, results, input, onPredictionSelected, textOnly), 280);
   });
   document.addEventListener('click', (e) => {
     if (!input.contains(e.target) && !results.contains(e.target)) results.classList.add('hidden');
   });
+}
+
+async function fetchSuggestions(val, results, input, onPredictionSelected, textOnly) {
+  try {
+    const { AutocompleteSuggestion, AutocompleteSessionToken } = await google.maps.importLibrary('places');
+    if (!window._autoToken) window._autoToken = new AutocompleteSessionToken();
+    // includedRegionCodes restricts to Japan; matches CJK/English/Japanese input alike.
+    const request = {
+      input: val,
+      language: 'zh-TW',
+      region: 'jp',
+      includedRegionCodes: ['jp'],
+      sessionToken: window._autoToken,
+    };
+    const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+    if (!suggestions || suggestions.length === 0) {
+      results.innerHTML = '<div class="search-result-empty">找不到符合的地點</div>';
+      results.classList.remove('hidden');
+      return;
+    }
+    const preds = suggestions.map(s => s.placePrediction).filter(Boolean);
+    results.innerHTML = preds.slice(0, 6).map((p, i) => {
+      const main = p.mainText?.text || p.text?.text || '';
+      const secondary = p.secondaryText?.text || '';
+      return `<div class="search-result-item" data-idx="${i}">
+        <div class="sr-name">${esc(main)}</div>
+        <div class="sr-addr">${esc(secondary)}</div>
+      </div>`;
+    }).join('');
+    results.classList.remove('hidden');
+    results.querySelectorAll('.search-result-item').forEach((el, i) => {
+      el.onclick = async () => {
+        const pred = preds[i];
+        if (textOnly) {
+          const main = pred.mainText?.text || pred.text?.text || '';
+          const secondary = pred.secondaryText?.text || '';
+          input.value = secondary ? `${main} ${secondary}` : main;
+          results.classList.add('hidden');
+        } else if (onPredictionSelected) {
+          window._autoToken = null; // end session after selection
+          await onPredictionSelected(pred);
+        }
+      };
+    });
+  } catch (err) {
+    console.warn('Autocomplete error:', err);
+    results.innerHTML = '<div class="search-result-empty">搜尋發生錯誤，請確認 Places API (New) 已啟用</div>';
+    results.classList.remove('hidden');
+  }
 }
 
 window.setSearchMode = function(m) {
