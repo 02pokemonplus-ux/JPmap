@@ -28,6 +28,8 @@
   <symbol id="icon-heart-filled" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M3 3v18h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="3" height="6" fill="currentColor"/><rect x="12" y="8" width="3" height="10" fill="currentColor"/><rect x="17" y="5" width="3" height="13" fill="currentColor"/></symbol>
   <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 19h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-star-filled" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/></symbol>
+  <symbol id="icon-star-outline" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="icon-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="15 16 20 12 15 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="20" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 9 12 4 17 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="4" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -102,6 +104,7 @@
         <button class="tool-btn active" id="btn-view" onclick="setMode('view')"><svg class="icon"><use href="#icon-hand-finger"/></svg>瀏覽</button>
         <button class="tool-btn" id="btn-pin" onclick="setMode('pin')"><svg class="icon"><use href="#icon-map-pin"/></svg>新增</button>
         <button class="tool-btn" id="btn-delete" onclick="setMode('delete')"><svg class="icon"><use href="#icon-trash"/></svg>刪除</button>
+        <button class="tool-btn" id="btn-batch" onclick="setMode('batch')"><svg class="icon"><use href="#pin-star"/></svg>批次歸行程</button>
         <button class="tool-btn" id="btn-hide-routes" onclick="toggleHideRoutes()" title="顯示/隱藏所有路線"><svg class="icon"><use href="#icon-route"/></svg>路線</button>
       </div>
 
@@ -143,6 +146,17 @@
         <div style="display:flex;gap:6px;">
           <button class="btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="setMode('view')">取消</button>
           <button id="delete-confirm-btn" style="padding:4px 10px;font-size:12px;background:#C0392B;color:#fff;border:none;border-radius:7px;cursor:pointer;" onclick="confirmDelete()">刪除</button>
+        </div>
+      </div>
+
+      <div id="batch-bar" class="hidden">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span id="batch-count">已選 0 個地點</span>
+          <select id="batch-trip" style="flex:1;min-width:120px;font-size:12px;padding:4px;"></select>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn-secondary" style="padding:4px 10px;font-size:12px;flex:1;" onclick="setMode('view')">取消</button>
+          <button style="padding:4px 10px;font-size:12px;flex:1;background:#185FA5;color:#fff;border:none;border-radius:7px;cursor:pointer;" onclick="applyBatchTrip()">套用</button>
         </div>
       </div>
 
@@ -227,7 +241,7 @@
   <button id="info-close" onclick="closeInfoPanel()"><svg class="icon"><use href="#icon-x"/></svg></button>
   <h3 id="info-name"></h3>
   <div id="info-meta"></div>
-  <img id="info-photo" class="hidden" alt="地點照片">
+  <div id="info-photos" class="hidden"></div>
   <div id="info-note" class="note-box"></div>
   <div class="info-actions">
     <button onclick="editSelectedPlace()"><svg class="icon"><use href="#icon-edit"/></svg> 編輯</button>
@@ -274,7 +288,19 @@
     <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
       <select id="f-trip" onchange="onTripSelectChange()"><option value="">未分類</option></select>
     </div>
-    <div class="form-row"><label>照片網址 <span style="color:#bbb;font-weight:400;">（可不填）</span></label><input type="text" id="f-photo" placeholder="貼上圖片連結 https://..."></div>
+    <div class="form-row"><label>Google Maps 連結 <span style="color:#bbb;font-weight:400;">（可貼上自動帶入座標）</span></label>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="f-gmaps-url" placeholder="貼上含座標的 Google Maps 網址" style="flex:1;">
+        <button type="button" class="btn-secondary" style="padding:6px 12px;font-size:12px;white-space:nowrap;" onclick="parseGmapsUrl()">帶入</button>
+      </div>
+      <div id="f-gmaps-hint" class="wish-hint hidden"></div>
+    </div>
+    <div class="form-row"><label>評分 <span style="color:#bbb;font-weight:400;">（可不評）</span></label>
+      <div id="f-rating" class="rating-picker"></div>
+    </div>
+    <div class="form-row"><label>照片網址 <span style="color:#bbb;font-weight:400;">（最多 5 張，可不填）</span></label>
+      <div id="f-photos"></div>
+    </div>
     <div class="form-row"><label>筆記</label><textarea id="f-note" placeholder="記錄感受、推薦理由..."></textarea></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">取消</button>
