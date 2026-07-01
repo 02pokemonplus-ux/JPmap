@@ -119,7 +119,7 @@ function buildMarkerIcon(iconKey, color, scale) {
 const MARKER_BASE_ZOOM = 14;
 const MARKER_BASE_SCALE = 7;
 const MARKER_MIN_SCALE = 3;
-const MARKER_MAX_SCALE = 9.5;
+const MARKER_MAX_SCALE = 13;
 
 // ── State ──
 let map, directionsService, directionsRenderer, autocompleteService, placesService;
@@ -405,7 +405,8 @@ window.closeRoutePointMenu = function() {
 function markerScaleForZoom() {
   const zoom = map.getZoom() || MARKER_BASE_ZOOM;
   const diff = zoom - MARKER_BASE_ZOOM;
-  const scale = MARKER_BASE_SCALE + diff * 1.1;
+  // Inverted: zooming OUT (negative diff) enlarges markers so they stay visible over all of Japan
+  const scale = MARKER_BASE_SCALE - diff * 0.55;
   return Math.max(MARKER_MIN_SCALE, Math.min(MARKER_MAX_SCALE, scale));
 }
 
@@ -691,6 +692,7 @@ window.editSelectedPlace = function() {
   renderColorPicker();
   refreshTripDropdowns();
   document.getElementById('f-trip').value = p.tripId || '';
+  applyTripDateRange(p.date || '');
   document.getElementById('add-modal').classList.remove('hidden');
 };
 
@@ -1167,14 +1169,58 @@ function refreshTripDropdowns() {
   if (fTrip) { const v = fTrip.value; fTrip.innerHTML = opts; fTrip.value = v; }
 }
 
-// When the place's trip dropdown changes to "新增行程", open the trip modal
+// When the place's trip dropdown changes to "新增行程", open the trip modal;
+// otherwise sync the date field to the selected trip's day range.
 window.onTripSelectChange = function() {
   const fTrip = document.getElementById('f-trip');
   if (fTrip && fTrip.value === '__new__') {
     fTrip.value = '';  // reset selection
     openTripModal(true);  // open in "return to place modal" mode
+    return;
   }
+  applyTripDateRange();
 };
+
+// Build a list of every date between a trip's start and end (inclusive)
+function tripDayList(trip) {
+  const days = [];
+  if (!trip || !trip.start) return days;
+  const start = new Date(trip.start + 'T00:00:00');
+  const end = new Date((trip.end || trip.start) + 'T00:00:00');
+  if (isNaN(start) || isNaN(end) || end < start) return trip.start ? [trip.start] : [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+// Show a day-dropdown limited to the trip range; fall back to free date input otherwise
+function applyTripDateRange(preferDate) {
+  const fTrip = document.getElementById('f-trip');
+  const dateInput = document.getElementById('f-date');
+  const daySel = document.getElementById('f-date-select');
+  const trip = trips.find(t => t.id === (fTrip ? fTrip.value : ''));
+  const days = tripDayList(trip);
+  if (trip && days.length) {
+    // Populate dropdown with the trip's days
+    daySel.innerHTML = days.map(d => `<option value="${d}">${d}</option>`).join('');
+    // Keep an existing valid date if it falls within range, else default to first day
+    const want = preferDate || dateInput.value;
+    daySel.value = days.includes(want) ? want : days[0];
+    daySel.classList.remove('hidden');
+    dateInput.classList.add('hidden');
+  } else {
+    daySel.classList.add('hidden');
+    dateInput.classList.remove('hidden');
+  }
+}
+
+// Read whichever date control is currently active
+function getPlaceDateValue() {
+  const daySel = document.getElementById('f-date-select');
+  if (daySel && !daySel.classList.contains('hidden')) return daySel.value;
+  return document.getElementById('f-date').value;
+}
 
 window.openTripModal = function(returnToPlace) {
   editingTripId = null; window._editingTripId = null;
@@ -1229,6 +1275,7 @@ window.saveTrip = async function() {
     document.getElementById('add-modal').classList.remove('hidden');
     refreshTripDropdowns();
     document.getElementById('f-trip').value = newId;
+    applyTripDateRange();
   }
 };
 
@@ -1266,6 +1313,7 @@ function openAddModal(prefillName) {
   // If adding while a trip is expanded in trips view, pre-select that trip
   const fTrip = document.getElementById('f-trip');
   if (fTrip) fTrip.value = (viewMode === 'trips' && selectedTripId && selectedTripId !== '__wishlist__') ? selectedTripId : '';
+  applyTripDateRange();
   document.getElementById('add-modal').classList.remove('hidden');
   if (!prefillName) setTimeout(() => document.getElementById('f-name').focus(), 50);
 }
@@ -1312,7 +1360,7 @@ window.savePlace = async function() {
   const data = {
     name,
     tag:   document.getElementById('f-tag').value,
-    date:  document.getElementById('f-date').value,
+    date:  getPlaceDateValue(),
     note:  document.getElementById('f-note').value.trim(),
     photo: document.getElementById('f-photo').value.trim(),
     icon:  pendingIcon,

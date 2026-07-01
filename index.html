@@ -267,7 +267,10 @@
       </label>
       <div class="wish-hint">勾選後地圖上會用黑色標記，並集中顯示在「想去的地方」群組</div>
     </div>
-    <div class="form-row"><label id="f-date-label">造訪日期</label><input type="date" id="f-date"></div>
+    <div class="form-row"><label id="f-date-label">造訪日期</label>
+      <input type="date" id="f-date">
+      <select id="f-date-select" class="hidden"></select>
+    </div>
     <div class="form-row"><label>所屬行程 <span style="color:#bbb;font-weight:400;">（可不選）</span></label>
       <select id="f-trip" onchange="onTripSelectChange()"><option value="">未分類</option></select>
     </div>
